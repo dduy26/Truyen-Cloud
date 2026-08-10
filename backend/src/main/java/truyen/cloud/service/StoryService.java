@@ -1,8 +1,8 @@
-package truyen.cloud.service; // Giữ đúng package thư mục hiện tại của bạn
+package truyen.cloud.service; 
 
 import java.util.List;
-import truyen.cloud.dtos.Request.StoryRequest;
-import truyen.cloud.dtos.Response.StoryResponse;
+import truyen.cloud.dtos.request.StoryRequest;
+import truyen.cloud.dtos.response.StoryResponse;
 
 public interface StoryService {
     StoryResponse createStory(StoryRequest request);

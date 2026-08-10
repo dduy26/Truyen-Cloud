@@ -1,16 +1,21 @@
-package truyen.cloud.service.Implement;
+package truyen.cloud.service.impl;
 
-import truyen.cloud.dtos.Request.StoryRequest;
-import truyen.cloud.dtos.Response.StoryResponse;
+import truyen.cloud.dtos.request.StoryRequest;
+import truyen.cloud.dtos.response.StoryResponse;
+import truyen.cloud.exception.ResourceNotFoundException;
 import truyen.cloud.mapper.StoryMapper;
 import truyen.cloud.model.Story;
 import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.StoryService;
+import truyen.cloud.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.Date; // Sử dụng java.util.Date
+import java.time.LocalDateTime;
 import java.util.List;
+
+import truyen.cloud.model.Chapter;
+import truyen.cloud.repository.ChapterRepository;
 
 @Service
 @RequiredArgsConstructor

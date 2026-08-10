@@ -1,7 +1,7 @@
 package truyen.cloud.mapper;
 
-import truyen.cloud.dtos.Request.StoryRequest;
-import truyen.cloud.dtos.Response.StoryResponse;
+import truyen.cloud.dtos.request.StoryRequest;
+import truyen.cloud.dtos.response.StoryResponse;
 import truyen.cloud.model.Story;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

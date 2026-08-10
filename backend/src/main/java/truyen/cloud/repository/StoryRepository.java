@@ -1,24 +1,21 @@
 package truyen.cloud.repository;
 
+import truyen.cloud.model.Story;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.stereotype.Repository;
-
-import truyen.cloud.model.Story;
 
 import java.util.Optional;
 
-@Repository
 public interface StoryRepository extends MongoRepository<Story, String> {
 
     Optional<Story> findBySlug(String slug);
 
-    // Đã sửa thành findByPublicTrue cho đúng chuẩn Spring Data
-    Page<Story> findByPublicTrue(Pageable pageable);
+    // Lấy danh sách truyện công khai có phân trang (dùng cho trang chủ)
+    Page<Story> findByIsPublicTrue(Pageable pageable);
 
-    // Đã sửa thành AndPublicTrue ở cuối hàm tìm kiếm
-    Page<Story> findByNameContainingIgnoreCaseAndPublicTrue(String name, Pageable pageable);
+    // Tìm kiếm truyện theo tên (không phân biệt hoa thường)
+    Page<Story> findByNameContainingIgnoreCaseAndIsPublicTrue(String name, Pageable pageable);
 
     boolean existsBySlug(String slug);
 }

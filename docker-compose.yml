@@ -1,0 +1,48 @@
+
+name: truyencloud
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: truyencloud-backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./backend/.env
+    develop:
+      watch:
+        # Sync Backend source code changes and restart application process
+        - action: sync+restart
+          path: ./backend/src
+          target: /app/src
+        # Rebuild container image when pom.xml changes
+        - action: rebuild
+          path: ./backend/pom.xml
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: truyencloud-frontend
+    ports:
+      - "5173:5173"
+    develop:
+      watch:
+        # Hot-reload React components and assets
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/public
+          target: /app/public
+        # Rebuild container when dependencies change
+        - action: rebuild
+          path: ./frontend/package.json
+    depends_on:
+      - backend
+
+networks:
+  default:
+    name: truyencloud-network

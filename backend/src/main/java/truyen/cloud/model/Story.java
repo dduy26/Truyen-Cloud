@@ -8,7 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import java.util.Date; 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -21,7 +21,7 @@ public class Story {
     private String id;
 
     private String name;
-
+    
     private String slug;
 
     @Field("origin_name")
@@ -38,11 +38,17 @@ public class Story {
 
     private String summary; 
 
+    @Field("latest_chapter")
+    private String latestChapter;
+
+    @Field("total_chapters")
+    private int totalChapters;
+
     @Field("rating")
     private double rating;
 
     @Field("created_at")
-    private Date createdAt; // Đã đổi sang Date
+    private LocalDateTime createdAt;
 
     @Field("view_count")
     private long viewCount;
@@ -51,5 +57,5 @@ public class Story {
     private boolean isPublic;
 
     @Field("update_at")
-    private Date updateAt; // Đã đổi sang Date
+    private LocalDateTime updateAt;
 }

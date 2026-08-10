@@ -1,15 +1,13 @@
 package truyen.cloud.service;
-import truyen.cloud.dtos.Request.UserCreateRequest;
-import truyen.cloud.dtos.Request.UserUpdateRequest;
-import truyen.cloud.dtos.Response.UserResponse;
 
-import java.util.List;
-import java.util.UUID;
+import truyen.cloud.dtos.request.LoginRequest;
+import truyen.cloud.dtos.request.RegisterRequest;
+import truyen.cloud.dtos.response.AuthResponse;
+import truyen.cloud.dtos.response.UserResponse;
+
 public interface UserService {
-        UserResponse createUser(UserCreateRequest userCreateRequest);
-        UserResponse updateUser(UUID userId, UserUpdateRequest userUpdateRequest);
-        List<UserResponse> getAllUsers();
-        UserResponse getUserById(UUID userId);
-        void deleteUser(UUID userId);
-    }
+    AuthResponse register(RegisterRequest request);
+    AuthResponse login(LoginRequest request);
+    UserResponse getCurrentUser(String username);
+}
 

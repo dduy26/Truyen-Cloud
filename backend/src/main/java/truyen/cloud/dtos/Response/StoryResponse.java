@@ -1,12 +1,14 @@
-package truyen.cloud.dtos.Response;
+package truyen.cloud.dtos.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Date; // Sử dụng java.util.Date đồng bộ
+import java.time.LocalDateTime;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 @Data
 @Builder
@@ -22,9 +24,15 @@ public class StoryResponse {
     private List<String> categories;
     private String status;
     private String summary;
+    private String latestChapter;
+    private int totalChapters;
     private long viewCount;
     private boolean isPublic;
     private double rating;
-    private Date createdAt; // Đã đổi sang Date
-    private Date updateAt;  // Đã đổi sang Date
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime createdAt;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime updateAt;
 }

@@ -1,9 +1,8 @@
 package truyen.cloud.controller;
 
-import truyen.cloud.dtos.Request.StoryRequest; 
-import truyen.cloud.dtos.Response.StoryResponse;
-import truyen.cloud.service.StoryService; 
-
+import truyen.cloud.dtos.request.StoryRequest;
+import truyen.cloud.dtos.response.StoryResponse;
+import truyen.cloud.service.StoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

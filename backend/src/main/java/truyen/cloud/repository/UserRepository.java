@@ -1,14 +1,21 @@
 package truyen.cloud.repository;
 
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.stereotype.Repository;
 import truyen.cloud.model.User;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.Optional;
-import java.util.UUID;
-@Repository
-public interface UserRepository extends MongoRepository<User,UUID>{
-    boolean existsByUsername(String username);
-    boolean existsByEmail(String email);
+
+public interface UserRepository extends MongoRepository<User, String> {
+    
+    Optional<User> findByEmail(String email);
+    Optional<User> findByEmailIgnoreCase(String email);
+    
     Optional<User> findByUsername(String username);
+    Optional<User> findByUsernameIgnoreCase(String username);
+    
+    boolean existsByEmail(String email);
+    boolean existsByEmailIgnoreCase(String email);
+    
+    boolean existsByUsername(String username);
+    boolean existsByUsernameIgnoreCase(String username);
 }

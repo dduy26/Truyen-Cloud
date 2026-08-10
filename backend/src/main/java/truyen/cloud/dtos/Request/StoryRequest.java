@@ -1,4 +1,4 @@
-package truyen.cloud.dtos.Request; // Đã đổi lại tên package trùng khớp với cấu trúc thư mục của bạn
+package truyen.cloud.dtos.request; 
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

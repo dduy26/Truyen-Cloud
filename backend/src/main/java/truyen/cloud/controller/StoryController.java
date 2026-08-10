@@ -1,8 +1,8 @@
-package com.example.demo.controller; // Giữ nguyên tên package thư mục của bạn
+package truyen.cloud.controller;
 
-import com.example.demo.dto.StoryRequest; // Đổi lại đường dẫn import dto của bạn
-import com.example.demo.dto.StoryResponse;
-import com.example.demo.service.StoryService;
+import truyen.cloud.dtos.Request.StoryRequest; 
+import truyen.cloud.dtos.Response.StoryResponse;
+import truyen.cloud.service.StoryService; 
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

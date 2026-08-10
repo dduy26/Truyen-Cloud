@@ -1,11 +1,11 @@
-package com.example.demo.repository;
+package truyen.cloud.repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
-import com.example.demo.entity.Story;
+import truyen.cloud.model.Story;
 
 import java.util.Optional;
 

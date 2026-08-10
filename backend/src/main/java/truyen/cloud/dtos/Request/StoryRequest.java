@@ -1,4 +1,4 @@
-package com.example.demo.dto; // Đã đổi lại tên package trùng khớp với cấu trúc thư mục của bạn
+package truyen.cloud.dtos.Request; // Đã đổi lại tên package trùng khớp với cấu trúc thư mục của bạn
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

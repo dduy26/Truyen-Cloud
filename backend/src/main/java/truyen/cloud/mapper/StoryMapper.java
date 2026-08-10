@@ -1,57 +1,28 @@
-package com.example.demo.mapper;
+package truyen.cloud.mapper;
 
-import com.example.demo.dto.StoryRequest;
-import com.example.demo.dto.StoryResponse;
-import com.example.demo.entity.Story;
-import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.Date;
+import truyen.cloud.dtos.Request.StoryRequest;
+import truyen.cloud.dtos.Response.StoryResponse;
+import truyen.cloud.model.Story;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.ReportingPolicy;
+import org.mapstruct.NullValuePropertyMappingStrategy;
 import java.util.List;
-import java.util.stream.Collectors;
 
-@Component
-public class StoryMapper {
+@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE, nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+public interface StoryMapper {
 
-    public StoryResponse toResponse(Story story) {
-        if (story == null) return null;
-        
-        StoryResponse response = new StoryResponse();
-        response.setId(story.getId());
-        response.setName(story.getName());
-        response.setSlug(story.getSlug());
-        response.setOriginName(story.getOriginName() != null ? story.getOriginName() : new ArrayList<>());
-        response.setThumbUrl(story.getThumbUrl());
-        response.setAuthor(story.getAuthor());
-        response.setCategories(story.getCategories() != null ? story.getCategories() : new ArrayList<>());
-        response.setStatus(story.getStatus());
-        response.setSummary(story.getSummary());
-        response.setViewCount(story.getViewCount());
-        // Sửa hàm setPublic nhận giá trị từ isPublic của Entity cho đồng bộ
-        response.setPublic(story.isPublic()); 
-        response.setRating(story.getRating());
-        response.setCreatedAt(story.getCreatedAt());
-        response.setUpdateAt(story.getUpdateAt());
-        return response;
-    }
+    StoryResponse toResponse(Story story);
 
-    public List<StoryResponse> toResponseList(List<Story> stories) {
-        if (stories == null) return null;
-        return stories.stream().map(this::toResponse).collect(Collectors.toList());
-    }
+    List<StoryResponse> toResponseList(List<Story> stories);
 
-    public Story toEntity(StoryRequest request) {
-        if (request == null) return null;
-        
-        Story story = new Story();
-        story.setName(request.getName());
-        story.setOriginName(request.getOriginName() != null ? request.getOriginName() : new ArrayList<>());
-        story.setThumbUrl(request.getThumbUrl());
-        story.setAuthor(request.getAuthor());
-        story.setCategories(request.getCategories() != null ? request.getCategories() : new ArrayList<>());
-        story.setStatus(request.getStatus());
-        story.setSummary(request.getSummary());
-        story.setPublic(request.isPublic());
-        return story;
-    }
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "slug", ignore = true)
+    @Mapping(target = "latestChapter", ignore = true)
+    @Mapping(target = "totalChapters", ignore = true)
+    @Mapping(target = "rating", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "viewCount", ignore = true)
+    @Mapping(target = "updateAt", ignore = true)
+    Story toEntity(StoryRequest request);
 }

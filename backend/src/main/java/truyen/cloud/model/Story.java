@@ -1,4 +1,4 @@
-package com.example.demo.entity;
+package truyen.cloud.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,7 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import java.util.Date; // Sử dụng java.util.Date an toàn cho MongoDB
+import java.util.Date; 
 import java.util.List;
 
 @Data
@@ -21,7 +21,7 @@ public class Story {
     private String id;
 
     private String name;
-    
+
     private String slug;
 
     @Field("origin_name")

@@ -1,4 +1,4 @@
-package truyen.cloud.Implement;
+package truyen.cloud.service.Implement;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

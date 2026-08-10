@@ -1,4 +1,4 @@
-package com.example.demo.dto;
+package truyen.cloud.dtos.Response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

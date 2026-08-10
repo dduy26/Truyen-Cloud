@@ -1,11 +1,11 @@
-package com.example.demo.service.impl;
+package truyen.cloud.service.Implement;
 
-import com.example.demo.dto.StoryRequest;
-import com.example.demo.dto.StoryResponse;
-import com.example.demo.entity.Story;
-import com.example.demo.mapper.StoryMapper;
-import com.example.demo.repository.StoryRepository;
-import com.example.demo.service.StoryService;
+import truyen.cloud.dtos.Request.StoryRequest;
+import truyen.cloud.dtos.Response.StoryResponse;
+import truyen.cloud.mapper.StoryMapper;
+import truyen.cloud.model.Story;
+import truyen.cloud.repository.StoryRepository;
+import truyen.cloud.service.StoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,16 +22,16 @@ public class StoryServiceImpl implements StoryService {
     @Override
     public StoryResponse createStory(StoryRequest request) {
         Story story = storyMapper.toEntity(request);
-        
+
         if (request.getName() != null) {
             String generatedSlug = request.getName().toLowerCase()
                     .replaceAll("[^a-z0-9\\s]", "")
                     .replaceAll("\\s+", "-");
             story.setSlug(generatedSlug);
         }
-        
-        story.setCreatedAt(new Date()); // Đổi thành new Date()
-        story.setUpdateAt(new Date()); // Đổi thành new Date()
+
+        story.setCreatedAt(new Date());
+        story.setUpdateAt(new Date());
         story.setViewCount(0L);
         story.setRating(0.0);
 

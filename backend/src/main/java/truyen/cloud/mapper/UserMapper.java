@@ -1,7 +1,7 @@
 package truyen.cloud.mapper;
 import org.springframework.stereotype.Component;
-import truyen.cloud.dtos.UserCreateRequest;
-import truyen.cloud.dtos.UserResponse;
+import truyen.cloud.dtos.Request.UserCreateRequest;
+import truyen.cloud.dtos.Response.UserResponse;
 import truyen.cloud.model.User;
 
 import java.time.LocalDateTime;
@@ -14,11 +14,12 @@ public class UserMapper {
                 .id(UUID.randomUUID())
                 .username(request.getUsername())
                 .email(request.getEmail())
-                .fullname(request.getFullname())
+                .fullName(request.getFullname())
+                .password(request.getPassword())
                 .avatar(request.getAvatar())
                 .roles(request.getRoles() != null ? request.getRoles() : "ROLE_USER")
-                .isActive(request.isActive())
-                .createAt(LocalDateTime.now())
+                .isActive(true)
+                .createdAt(LocalDateTime.now())
                 .build();
     }
     public UserResponse toResponse(User user){

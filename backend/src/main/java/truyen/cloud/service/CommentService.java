@@ -8,9 +8,11 @@ import truyen.cloud.dtos.response.CommentResponse;
 
 public interface CommentService {
     CommentResponse createComment(String username, CommentRequest request);
+    CommentResponse updateComment(String commentId, String username, String newContent);
     
     Page<CommentResponse> getCommentsByStory(String storySlug, Pageable pageable);
     Page<CommentResponse> getCommentsByChapter(String storySlug, String chapterName, Pageable pageable);
+    Page<CommentResponse> getAllComments(Pageable pageable);
     
     void deleteComment(String commentId, String currentUsername);
 }

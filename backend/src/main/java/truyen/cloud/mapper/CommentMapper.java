@@ -21,5 +21,7 @@ public interface CommentMapper {
     @Mapping(target = "userName", ignore = true)
     @Mapping(target = "userAvatar", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "isEdited", ignore = true)
     Comment toEntity(CommentRequest request);
 }

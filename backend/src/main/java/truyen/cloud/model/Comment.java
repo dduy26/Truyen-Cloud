@@ -38,4 +38,10 @@ public class Comment {
 
     @Field("created_at")
     private LocalDateTime createdAt; // Thời gian bình luận
+
+    @Field("updated_at")
+    private LocalDateTime updatedAt; // Thời gian chỉnh sửa
+
+    @Field("is_edited")
+    private boolean isEdited;       // Đã chỉnh sửa hay chưa
 }

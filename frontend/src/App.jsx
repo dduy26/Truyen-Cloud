@@ -170,6 +170,10 @@ export default function App() {
   const parseDate = (input) => {
     if (!input) return new Date();
     if (input instanceof Date) return input;
+    if (typeof input === 'object' && input !== null) {
+      if (input.$date) return parseDate(input.$date);
+      if (input.date) return parseDate(input.date);
+    }
     if (Array.isArray(input)) {
       const [y, m, d, h, min, s] = input;
       return new Date(y, (m || 1) - 1, d || 1, h || 0, min || 0, s || 0);
@@ -179,13 +183,16 @@ export default function App() {
     }
     if (typeof input === 'string') {
       const str = input.trim();
-      if (str.endsWith('Z') || str.includes('+')) {
-        const parsed = new Date(str);
-        if (!isNaN(parsed.getTime())) return parsed;
-      }
+      // First: try regex to extract date parts (handles LocalDateTime without timezone as LOCAL time)
       const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
       if (match) {
         const [, y, m, d, h, min, s] = match;
+        // If string has timezone info (Z or +offset), let native parser handle it correctly
+        if (str.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(str)) {
+          const parsed = new Date(str);
+          if (!isNaN(parsed.getTime())) return parsed;
+        }
+        // No timezone info (e.g. "2026-08-12T12:43:00") → treat as local time
         return new Date(
           parseInt(y, 10),
           parseInt(m, 10) - 1,
@@ -473,6 +480,14 @@ export default function App() {
   const [storyCommentSubmitting, setStoryCommentSubmitting] = useState(false);
   const [storyCommentPage, setStoryCommentPage] = useState(1);
 
+  // Comment Edit / Delete / Report State
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentContent, setEditCommentContent] = useState('');
+  const [reportingCommentId, setReportingCommentId] = useState(null);
+  const [reportReason, setReportReason] = useState('SPAM');
+  const [reportDescription, setReportDescription] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false);
+
   const [storyDetailSearchQuery, setStoryDetailSearchQuery] = useState('');
   // Live Search Autocomplete State
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
@@ -657,6 +672,17 @@ export default function App() {
         });
         uniqueChapters.sort((a, b) => parseFloat(a.chapterName || a.chapterNumber || 0) - parseFloat(b.chapterName || b.chapterNumber || 0));
         setStoryChaptersList(uniqueChapters.map(c => ({ ...c, storySlug: slug })));
+
+        // Automatically synchronize selectedStory totalChapters & latestChapter with actual chapter list
+        if (uniqueChapters.length > 0) {
+          const maxChItem = uniqueChapters[uniqueChapters.length - 1];
+          const maxChNum = maxChItem.chapterName || maxChItem.chapterNumber || '1';
+          setSelectedStory(prev => prev ? {
+            ...prev,
+            totalChapters: uniqueChapters.length,
+            latestChapter: maxChNum.startsWith('Ch') ? maxChNum : `Ch. ${maxChNum}`
+          } : prev);
+        }
       } else if (totalCount > 0) {
         const autoChapters = Array.from({ length: totalCount }, (_, i) => ({
           id: `ch-${slug}-${i + 1}`,
@@ -823,6 +849,78 @@ export default function App() {
       showToast('Lỗi khi gửi bình luận!', 'error');
     } finally {
       setCommentSubmitting(false);
+    }
+  };
+
+  // Comment Edit / Delete / Report Handlers
+  const handleStartEditComment = (comment) => {
+    setEditingCommentId(comment.id);
+    setEditCommentContent(comment.content);
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditCommentContent('');
+  };
+
+  const handleSaveEditComment = async (commentId, isStoryComment = false) => {
+    if (!editCommentContent.trim()) return;
+    try {
+      const res = await api.updateComment(commentId, editCommentContent.trim());
+      if (res) {
+        const updateFn = (prev) => prev.map(c => c.id === commentId ? { ...c, content: editCommentContent.trim(), isEdited: true, updatedAt: new Date().toISOString() } : c);
+        if (isStoryComment) {
+          setStoryComments(updateFn);
+        } else {
+          setChapterComments(updateFn);
+        }
+        showToast('✏️ Đã cập nhật bình luận thành công!');
+      }
+    } catch (err) {
+      showToast('Lỗi khi chỉnh sửa bình luận!', 'error');
+    } finally {
+      setEditingCommentId(null);
+      setEditCommentContent('');
+    }
+  };
+
+  const handleDeleteComment = async (commentId, isStoryComment = false) => {
+    if (!window.confirm('Bạn có chắc muốn xóa bình luận này?')) return;
+    try {
+      await api.deleteComment(commentId);
+      if (isStoryComment) {
+        setStoryComments(prev => prev.filter(c => c.id !== commentId));
+      } else {
+        setChapterComments(prev => prev.filter(c => c.id !== commentId));
+      }
+      showToast('🗑️ Đã xóa bình luận thành công!');
+    } catch (err) {
+      showToast('Lỗi khi xóa bình luận!', 'error');
+    }
+  };
+
+  const handleOpenReportModal = (commentId) => {
+    setReportingCommentId(commentId);
+    setReportReason('SPAM');
+    setReportDescription('');
+    setShowReportModal(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!reportingCommentId) return;
+    try {
+      await api.reportComment({
+        commentId: reportingCommentId,
+        reason: reportReason,
+        description: reportDescription.trim() || null
+      });
+      showToast('🚩 Đã gửi báo cáo! Admin sẽ xem xét sớm nhất.');
+      setShowReportModal(false);
+      setReportingCommentId(null);
+      setReportReason('SPAM');
+      setReportDescription('');
+    } catch (err) {
+      showToast('Lỗi khi gửi báo cáo!', 'error');
     }
   };
 
@@ -3020,109 +3118,112 @@ export default function App() {
             </div>
 
             {/* 4. DANH SÁCH CHƯƠNG SECTION */}
-            <div style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '16px',
-              padding: '24px',
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  📚 Danh Sách Chương ({storyChaptersList.length || selectedStory.totalChapters || 0})
-                </h3>
+            {(() => {
+              let chaptersList = (storyChaptersList && storyChaptersList.length > 0)
+                ? storyChaptersList
+                : [];
 
-                <input
-                  type="text"
-                  placeholder="🔍 Tìm nhanh số chương..."
-                  className="form-control"
-                  style={{ width: '220px', padding: '6px 12px', fontSize: '13px' }}
-                  value={storyDetailSearchQuery}
-                  onChange={(e) => setStoryDetailSearchQuery(e.target.value)}
-                />
-              </div>
+              if (chaptersList.length === 0 && selectedStory) {
+                const total = selectedStory.totalChapters || (selectedStory.latestChapter ? parseInt(String(selectedStory.latestChapter).replace(/\D/g, ''), 10) : 0) || 0;
+                if (total > 0) {
+                  chaptersList = Array.from({ length: total }, (_, i) => ({
+                    id: `ch-${selectedStory.slug}-${i + 1}`,
+                    storySlug: selectedStory.slug,
+                    chapterName: String(i + 1),
+                    chapterNumber: String(i + 1),
+                    chapterTitle: `Chương ${i + 1}`
+                  }));
+                }
+              }
 
-              {/* Scrollable Chapters Table List (Latest Chapters on top) */}
-              <div style={{
-                maxHeight: '400px',
-                overflowY: 'auto',
-                border: '1px solid var(--border-color)',
-                borderRadius: '12px'
-              }}>
-                <table className="admin-data-table" style={{ width: '100%' }}>
-                  <tbody>
-                    {(() => {
-                      let chaptersList = (storyChaptersList && storyChaptersList.length > 0)
-                        ? storyChaptersList
-                        : [];
+              const seen = new Set();
+              const unique = chaptersList.filter(c => {
+                const cNum = String(c.chapterName || c.chapterNumber || '');
+                if (!cNum || seen.has(cNum)) return false;
+                seen.add(cNum);
+                return true;
+              });
 
-                      if (chaptersList.length === 0 && selectedStory) {
-                        const total = selectedStory.totalChapters || (selectedStory.latestChapter ? parseInt(String(selectedStory.latestChapter).replace(/\D/g, ''), 10) : 0) || 0;
-                        if (total > 0) {
-                          chaptersList = Array.from({ length: total }, (_, i) => ({
-                            id: `ch-${selectedStory.slug}-${i + 1}`,
-                            storySlug: selectedStory.slug,
-                            chapterName: String(i + 1),
-                            chapterNumber: String(i + 1),
-                            chapterTitle: `Chương ${i + 1}`
-                          }));
-                        }
-                      }
+              unique.sort((a, b) => parseFloat(a.chapterName || a.chapterNumber || 0) - parseFloat(b.chapterName || b.chapterNumber || 0));
 
-                      const seen = new Set();
-                      const unique = chaptersList.filter(c => {
-                        const cNum = String(c.chapterName || c.chapterNumber || '');
-                        if (!cNum || seen.has(cNum)) return false;
-                        seen.add(cNum);
-                        return true;
-                      });
+              const filteredChapters = unique.filter(ch => {
+                if (!storyDetailSearchQuery.trim()) return true;
+                const q = storyDetailSearchQuery.trim().toLowerCase();
+                const cNum = String(ch.chapterName || ch.chapterNumber || '');
+                const cTitle = String(ch.chapterTitle || ch.title || '').toLowerCase();
+                return cNum.includes(q) || cTitle.includes(q);
+              });
 
-                      if (unique.length === 0) {
-                        return (
+              const countDisplay = unique.length > 0 ? unique.length : (selectedStory?.totalChapters || 0);
+
+              return (
+                <div style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                      📚 Danh Sách Chương ({countDisplay})
+                    </h3>
+
+                    <input
+                      type="text"
+                      placeholder="🔍 Tìm nhanh số chương..."
+                      className="form-control"
+                      style={{ width: '220px', padding: '6px 12px', fontSize: '13px' }}
+                      value={storyDetailSearchQuery}
+                      onChange={(e) => setStoryDetailSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Scrollable Chapters Table List (Latest Chapters on top) */}
+                  <div style={{
+                    maxHeight: '400px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px'
+                  }}>
+                    <table className="admin-data-table" style={{ width: '100%' }}>
+                      <tbody>
+                        {filteredChapters.length === 0 ? (
                           <tr>
                             <td colSpan={2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-                              Chưa có chương nào được xuất bản cho bộ truyện này.
+                              Chưa có chương nào phù hợp hoặc chưa xuất bản.
                             </td>
                           </tr>
-                        );
-                      }
-
-                      unique.sort((a, b) => parseFloat(a.chapterName || a.chapterNumber || 0) - parseFloat(b.chapterName || b.chapterNumber || 0));
-
-                      return unique
-                        .filter(ch => {
-                          if (!storyDetailSearchQuery.trim()) return true;
-                          const q = storyDetailSearchQuery.trim().toLowerCase();
-                          const cNum = String(ch.chapterName || ch.chapterNumber || '');
-                          const cTitle = String(ch.chapterTitle || ch.title || '').toLowerCase();
-                          return cNum.includes(q) || cTitle.includes(q);
-                        })
-                        .slice()
-                        .reverse()
-                        .map((ch, idx) => {
-                          const cNum = ch.chapterName || ch.chapterNumber || '1';
-                          const cTitle = ch.chapterTitle || ch.title || `Chương ${cNum}`;
-                          const formattedDate = formatSmartChapterTime(ch.updatedAt, idx);
-                          return (
-                            <tr
-                              key={ch.id || cNum}
-                              style={{ cursor: 'pointer', transition: 'background 0.15s ease' }}
-                              onClick={() => navigate(`/read/${selectedStory.slug}/${cNum}`)}
-                            >
-                              <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 600, color: 'var(--text-color)' }}>
-                                {cTitle.startsWith('Chương') || cTitle.startsWith('Chapter') ? cTitle : `Chương ${cNum}: ${cTitle}`}
-                              </td>
-                              <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
-                                {formattedDate}
-                              </td>
-                            </tr>
-                          );
-                        });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        ) : (
+                          filteredChapters
+                            .slice()
+                            .reverse()
+                            .map((ch, idx) => {
+                              const cNum = ch.chapterName || ch.chapterNumber || '1';
+                              const cTitle = ch.chapterTitle || ch.title || `Chương ${cNum}`;
+                              const formattedDate = formatSmartChapterTime(ch.updatedAt, idx);
+                              return (
+                                <tr
+                                  key={ch.id || cNum}
+                                  style={{ cursor: 'pointer', transition: 'background 0.15s ease' }}
+                                  onClick={() => navigate(`/read/${selectedStory.slug}/${cNum}`)}
+                                >
+                                  <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 600, color: 'var(--text-color)' }}>
+                                    {cTitle.startsWith('Chương') || cTitle.startsWith('Chapter') ? cTitle : `Chương ${cNum}: ${cTitle}`}
+                                  </td>
+                                  <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+                                    {formattedDate}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 5. DANH SÁCH BÌNH LUẬN TRUYỆN SECTION (Dưới danh sách chương) */}
             <div style={{
@@ -3216,14 +3317,53 @@ export default function App() {
                                       {c.chapterName.startsWith('Ch') ? c.chapterName : `Ch. ${c.chapterName}`}
                                     </span>
                                   )}
+                                  {c.isEdited && (
+                                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic' }}>(đã chỉnh sửa)</span>
+                                  )}
                                 </div>
-                                <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                  {c.createdAt ? formatRelativeTime(c.createdAt, idx) : (c.time || 'vừa xong')}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                    {c.createdAt ? formatRelativeTime(c.createdAt, idx) : (c.time || 'vừa xong')}
+                                  </span>
+                                  {user && (
+                                    <div className="comment-actions-menu">
+                                      {/* Owner: Edit + Delete */}
+                                      {(c.userName === user.username || c.userId === user.id) && (
+                                        <>
+                                          <button className="comment-action-btn edit" title="Chỉnh sửa" onClick={() => handleStartEditComment(c)}>✏️</button>
+                                          <button className="comment-action-btn delete" title="Xóa" onClick={() => handleDeleteComment(c.id, true)}>🗑️</button>
+                                        </>
+                                      )}
+                                      {/* Admin: Delete (if not owner) */}
+                                      {userRole === 'ADMIN' && c.userName !== user.username && c.userId !== user.id && (
+                                        <button className="comment-action-btn delete" title="Xóa (Admin)" onClick={() => handleDeleteComment(c.id, true)}>🗑️</button>
+                                      )}
+                                      {/* Report (not own comment) */}
+                                      {c.userName !== user.username && c.userId !== user.id && (
+                                        <button className="comment-action-btn report" title="Báo cáo" onClick={() => handleOpenReportModal(c.id)}>🚩</button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="comment-content-text" style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                {c.content}
-                              </div>
+                              {editingCommentId === c.id ? (
+                                <div className="comment-edit-form">
+                                  <textarea
+                                    className="comment-edit-textarea"
+                                    value={editCommentContent}
+                                    onChange={(e) => setEditCommentContent(e.target.value)}
+                                    rows={3}
+                                  />
+                                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                    <button className="btn-primary" style={{ fontSize: '12px', padding: '4px 14px' }} onClick={() => handleSaveEditComment(c.id, true)}>💾 Lưu</button>
+                                    <button className="btn-secondary" style={{ fontSize: '12px', padding: '4px 14px' }} onClick={handleCancelEditComment}>Hủy</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="comment-content-text" style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                  {c.content}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))
@@ -3480,11 +3620,49 @@ export default function App() {
                                 onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_USER_AVATAR; }}
                               />
                               <div style={{ flex: 1 }}>
-                                <div className="comment-author-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{c.userName || c.username || 'Thành Viên'}</strong>
-                                  <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.createdAt ? formatRelativeTime(c.createdAt, idx) : (c.time || 'vừa xong')}</span>
+                                <div className="comment-author-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{c.userName || c.username || 'Thành Viên'}</strong>
+                                    {c.isEdited && (
+                                      <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic' }}>(đã chỉnh sửa)</span>
+                                    )}
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.createdAt ? formatRelativeTime(c.createdAt, idx) : (c.time || 'vừa xong')}</span>
+                                    {user && (
+                                      <div className="comment-actions-menu">
+                                        {(c.userName === user.username || c.userId === user.id) && (
+                                          <>
+                                            <button className="comment-action-btn edit" title="Chỉnh sửa" onClick={() => handleStartEditComment(c)}>✏️</button>
+                                            <button className="comment-action-btn delete" title="Xóa" onClick={() => handleDeleteComment(c.id, false)}>🗑️</button>
+                                          </>
+                                        )}
+                                        {userRole === 'ADMIN' && c.userName !== user.username && c.userId !== user.id && (
+                                          <button className="comment-action-btn delete" title="Xóa (Admin)" onClick={() => handleDeleteComment(c.id, false)}>🗑️</button>
+                                        )}
+                                        {c.userName !== user.username && c.userId !== user.id && (
+                                          <button className="comment-action-btn report" title="Báo cáo" onClick={() => handleOpenReportModal(c.id)}>🚩</button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="comment-content-text" style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{c.content}</div>
+                                {editingCommentId === c.id ? (
+                                  <div className="comment-edit-form">
+                                    <textarea
+                                      className="comment-edit-textarea"
+                                      value={editCommentContent}
+                                      onChange={(e) => setEditCommentContent(e.target.value)}
+                                      rows={3}
+                                    />
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                      <button className="btn-primary" style={{ fontSize: '12px', padding: '4px 14px' }} onClick={() => handleSaveEditComment(c.id, false)}>💾 Lưu</button>
+                                      <button className="btn-secondary" style={{ fontSize: '12px', padding: '4px 14px' }} onClick={handleCancelEditComment}>Hủy</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="comment-content-text" style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{c.content}</div>
+                                )}
                               </div>
                             </div>
                           ))
@@ -3605,6 +3783,59 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 15l7-7 7 7" />
           </svg>
         </button>
+      )}
+
+      {/* COMMENT REPORT MODAL */}
+      {showReportModal && (
+        <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div className="modal-card report-modal" style={{ width: '460px', maxWidth: '90vw' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800 }}>🚩 Báo Cáo Bình Luận</h3>
+              <button className="auth-close-btn" onClick={() => setShowReportModal(false)}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)' }}>Lý do báo cáo:</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[
+                  { value: 'SPAM', label: '🗑️ Spam / Quảng cáo' },
+                  { value: 'NOI_DUNG_XAU', label: '🚫 Nội dung xấu / Thô tục' },
+                  { value: 'QUAY_ROI', label: '⚠️ Quấy rối / Đe dọa' },
+                  { value: 'KHAC', label: '📝 Lý do khác' }
+                ].map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', backgroundColor: reportReason === opt.value ? 'rgba(236, 72, 153, 0.1)' : 'var(--bg-secondary)', border: reportReason === opt.value ? '2px solid var(--accent-pink)' : '1px solid var(--border-color)', cursor: 'pointer', fontSize: '13px', fontWeight: reportReason === opt.value ? 700 : 500, transition: 'all 0.2s ease' }}>
+                    <input
+                      type="radio"
+                      name="reportReason"
+                      value={opt.value}
+                      checked={reportReason === opt.value}
+                      onChange={(e) => setReportReason(e.target.value)}
+                      style={{ accentColor: 'var(--accent-pink)' }}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)' }}>Mô tả chi tiết (tùy chọn):</label>
+              <textarea
+                className="form-control"
+                rows={3}
+                placeholder="Mô tả thêm về vấn đề..."
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                style={{ fontSize: '13px' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn-secondary" onClick={() => setShowReportModal(false)}>Hủy</button>
+              <button className="btn-primary" style={{ backgroundColor: '#ef4444' }} onClick={handleSubmitReport}>🚩 Gửi Báo Cáo</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

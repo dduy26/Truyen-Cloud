@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/stories/**").permitAll()
                 .requestMatchers("/api/v1/chapters/**").permitAll()
                 .requestMatchers("/api/v1/comments/**").permitAll()
+                .requestMatchers("/api/v1/comment-reports/**").permitAll()
 
                 // 3. Other Requests
                 .anyRequest().permitAll()

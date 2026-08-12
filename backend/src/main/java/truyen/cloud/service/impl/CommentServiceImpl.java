@@ -4,6 +4,10 @@ import java.time.LocalDateTime;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
@@ -24,6 +28,7 @@ public class CommentServiceImpl implements CommentService {
     private final CommentRepository commentRepository;
     private final UserRepository userRepository;
     private final CommentMapper commentMapper;
+    private final MongoTemplate mongoTemplate;
 
     @Override
     public CommentResponse createComment(String username, CommentRequest request) {
@@ -54,6 +59,28 @@ public class CommentServiceImpl implements CommentService {
         );
 
         comment.setCreatedAt(LocalDateTime.now());
+        comment.setEdited(false);
+        Comment savedComment = commentRepository.save(comment);
+        return commentMapper.toResponse(savedComment);
+    }
+
+    @Override
+    public CommentResponse updateComment(String commentId, String username, String newContent) {
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận với id: " + commentId));
+
+        User currentUser = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
+
+        boolean isOwner = comment.getUserId().equals(currentUser.getId());
+
+        if (!isOwner) {
+            throw new RuntimeException("Chỉ chủ bình luận mới có quyền chỉnh sửa!");
+        }
+
+        comment.setContent(newContent);
+        comment.setUpdatedAt(LocalDateTime.now());
+        comment.setEdited(true);
         Comment savedComment = commentRepository.save(comment);
         return commentMapper.toResponse(savedComment);
     }
@@ -69,6 +96,18 @@ public class CommentServiceImpl implements CommentService {
         Page<Comment> comments = commentRepository.findByStorySlugAndChapterName(storySlug, chapterName, pageable);
         
         return comments.map(commentMapper::toResponse);
+    }
+
+    @Override
+    public Page<CommentResponse> getAllComments(Pageable pageable) {
+        Query query = new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).with(pageable);
+        var comments = mongoTemplate.find(query, Comment.class);
+        long total = mongoTemplate.count(new Query(), Comment.class);
+        return PageableExecutionUtils.getPage(
+            comments.stream().map(commentMapper::toResponse).toList(),
+            pageable,
+            () -> total
+        );
     }
 
     @Override

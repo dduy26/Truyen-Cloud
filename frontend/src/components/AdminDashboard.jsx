@@ -235,6 +235,7 @@ export default function AdminDashboard({
   // Comment & Report Moderation State (Feature 3)
   const [commentsList, setCommentsList] = useState([]);
   const [reportsList, setReportsList] = useState([]);
+  const [commentReportsList, setCommentReportsList] = useState([]);
 
   // Fetch Users & Moderation Data on Component Mount & Tab Switch
   useEffect(() => {
@@ -274,12 +275,14 @@ export default function AdminDashboard({
 
   const fetchModerationData = async () => {
     try {
-      const [comments, reports] = await Promise.all([
+      const [comments, reports, commentReports] = await Promise.all([
         api.getComments(),
-        api.getChapterReports()
+        api.getChapterReports(),
+        api.getCommentReports()
       ]);
       setCommentsList(comments || []);
       setReportsList(reports || []);
+      setCommentReportsList(commentReports || []);
     } catch (err) {
       console.error(err);
     }
@@ -535,6 +538,29 @@ export default function AdminDashboard({
     showToast('✓ Đã đánh dấu xử lý xong báo cáo lỗi!');
   };
 
+  // Comment Report Actions
+  const handleResolveCommentReport = async (reportId) => {
+    await api.resolveCommentReport(reportId);
+    setCommentReportsList(prev => prev.map(r => r.id === reportId ? { ...r, status: 'RESOLVED' } : r));
+    showToast('✓ Đã xử lý báo cáo bình luận!');
+  };
+
+  const handleDismissCommentReport = async (reportId) => {
+    await api.dismissCommentReport(reportId);
+    setCommentReportsList(prev => prev.map(r => r.id === reportId ? { ...r, status: 'DISMISSED' } : r));
+    showToast('✗ Đã bỏ qua báo cáo bình luận.');
+  };
+
+  const handleDeleteCommentFromReport = async (commentId, reportId) => {
+    if (window.confirm('Xóa bình luận bị báo cáo và đánh dấu đã xử lý?')) {
+      await api.deleteComment(commentId);
+      setCommentsList(prev => prev.filter(c => c.id !== commentId));
+      await api.resolveCommentReport(reportId);
+      setCommentReportsList(prev => prev.map(r => r.id === reportId ? { ...r, status: 'RESOLVED' } : r));
+      showToast('🗑️ Đã xóa comment + xử lý báo cáo!');
+    }
+  };
+
   // COMPUTED STORY DATA FOR TABLE WITH FILTERS & PAGINATION (Feature 4)
   let processedStories = [...safeStories];
 
@@ -662,7 +688,7 @@ export default function AdminDashboard({
             className={`admin-tab-btn ${activeTab === 'comments' ? 'active' : ''}`}
             onClick={() => setActiveTab('comments')}
           >
-            💬 Bình Luận & Báo Cáo ({commentsList.length + reportsList.filter(r => r.status === 'PENDING').length})
+            💬 Bình Luận & Báo Cáo ({commentsList.length + commentReportsList.filter(r => r.status === 'PENDING').length})
           </button>
         </div>
       </nav>
@@ -765,7 +791,37 @@ export default function AdminDashboard({
                 )}
               </div>
 
-              {/* Box 2: System Audit Log & Operations */}
+              {/* Box 2: Pending Comment Reports */}
+              <div className="admin-panel-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: 700 }}>🚩 Báo Cáo Bình Luận</h3>
+                  <button className="btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setActiveTab('comments')}>
+                    Quản Lý ({commentReportsList.filter(r => r.status === 'PENDING').length})
+                  </button>
+                </div>
+
+                {commentReportsList.filter(r => r.status === 'PENDING').length === 0 ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#10b981', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>
+                    ✓ Không có báo cáo bình luận nào cần duyệt!
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {commentReportsList.filter(r => r.status === 'PENDING').slice(0, 3).map(r => (
+                      <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px' }}>
+                        <div>
+                          <div style={{ fontWeight: 700 }}>🚩 {r.reason === 'SPAM' ? 'Spam' : r.reason === 'NOI_DUNG_XAU' ? 'Nội dung xấu' : r.reason === 'QUAY_ROI' ? 'Quấy rối' : 'Khác'}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Bởi {r.reporterUserName} • "{(r.commentContent || '').substring(0, 40)}..."</div>
+                        </div>
+                        <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#ef4444' }} onClick={() => handleDeleteCommentFromReport(r.commentId, r.id)}>
+                          Xóa & Xử lý
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Box 3: System Audit Log & Operations */}
               <div className="admin-panel-card">
                 <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px' }}>📋 Nhật Ký Hoạt Động Quản Trị</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
@@ -1284,47 +1340,115 @@ export default function AdminDashboard({
         {activeTab === 'comments' && (
           <div>
             <div className="admin-page-heading">
-              <h2>💬 Kiểm Duyệt Bình Luận & Báo Cáo Lỗi</h2>
-              <p>Quản lý các bình luận gần đây của độc giả và xử lý các báo cáo hỏng chapter.</p>
+              <h2>💬 Kiểm Duyệt Bình Luận & Báo Cáo</h2>
+              <p>Quản lý các bình luận gần đây, xử lý báo cáo bình luận từ độc giả và báo cáo lỗi chapter.</p>
             </div>
 
-            {/* Section A: Recent Comments */}
+            {/* Section A: Comment Reports from Users */}
+            <div className="admin-panel-card" style={{ marginBottom: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 800 }}>🚩 Báo Cáo Bình Luận Từ Độc Giả ({commentReportsList.filter(r => r.status === 'PENDING').length} chờ xử lý)</h3>
+              </div>
+              {commentReportsList.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#10b981', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>
+                  ✓ Không có báo cáo bình luận nào!
+                </div>
+              ) : (
+                <div className="admin-table-wrapper">
+                  <table className="admin-data-table">
+                    <thead>
+                      <tr>
+                        <th>Người Báo Cáo</th>
+                        <th>Comment Bị Báo Cáo</th>
+                        <th>Lý Do</th>
+                        <th>Mô Tả</th>
+                        <th>Trạng Thái</th>
+                        <th style={{ width: '220px', textAlign: 'center' }}>Thao Tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commentReportsList.map((r) => (
+                        <tr key={r.id}>
+                          <td><strong>👤 {r.reporterUserName}</strong></td>
+                          <td>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '2px' }}>Bởi: <strong>{r.commentUserName}</strong></div>
+                            <div style={{ fontSize: '13px', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>"{r.commentContent}"</div>
+                            <div style={{ fontSize: '10px', color: 'var(--accent-pink)', marginTop: '2px' }}>{r.storySlug} {r.chapterName && r.chapterName !== 'General' ? `• Ch. ${r.chapterName}` : ''}</div>
+                          </td>
+                          <td>
+                            <span className="category-chip" style={{ color: r.reason === 'SPAM' ? '#f59e0b' : r.reason === 'NOI_DUNG_XAU' ? '#ef4444' : r.reason === 'QUAY_ROI' ? '#dc2626' : '#6b7280', fontSize: '11px', fontWeight: 700 }}>
+                              {r.reason === 'SPAM' ? '🗑️ Spam' : r.reason === 'NOI_DUNG_XAU' ? '🚫 Nội dung xấu' : r.reason === 'QUAY_ROI' ? '⚠️ Quấy rối' : '📝 Khác'}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '12px', maxWidth: '200px' }}>{r.description || '—'}</td>
+                          <td>
+                            <span className={`status-badge ${r.status === 'RESOLVED' ? 'completed' : r.status === 'DISMISSED' ? 'completed' : 'ongoing'}`}>
+                              {r.status === 'RESOLVED' ? '✓ Đã xử lý' : r.status === 'DISMISSED' ? '✗ Đã bỏ qua' : '⏳ Chờ xử lý'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {r.status === 'PENDING' && (
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                <button className="admin-action-btn delete" style={{ fontSize: '11px' }} onClick={() => handleDeleteCommentFromReport(r.commentId, r.id)}>🗑️ Xóa Comment</button>
+                                <button className="admin-action-btn edit" style={{ fontSize: '11px' }} onClick={() => handleResolveCommentReport(r.id)}>✓ Xử lý</button>
+                                <button className="admin-action-btn" style={{ fontSize: '11px', background: 'var(--bg-secondary)', color: 'var(--text-muted)' }} onClick={() => handleDismissCommentReport(r.id)}>✗ Bỏ qua</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Section B: Recent Comments */}
             <div className="admin-panel-card" style={{ marginBottom: '32px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '16px' }}>💬 Bình Luận Mới Nhất</h3>
-              <div className="admin-table-wrapper">
-                <table className="admin-data-table">
-                  <thead>
-                    <tr>
-                      <th>Người Gửi</th>
-                      <th>Bộ Truyện & Chapter</th>
-                      <th>Nội Dung Bình Luận</th>
-                      <th>Thời Gian</th>
-                      <th style={{ width: '100px', textAlign: 'center' }}>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {commentsList.map((c) => (
-                      <tr key={c.id}>
-                        <td><strong>👤 {c.username}</strong></td>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{c.storyName}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--accent-pink)' }}>{c.chapter}</div>
-                        </td>
-                        <td style={{ fontSize: '13px' }}>"{c.content}"</td>
-                        <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.time}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button className="admin-action-btn delete" onClick={() => handleDeleteComment(c.id)}>
-                            🗑️ Xóa
-                          </button>
-                        </td>
+              {commentsList.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Chưa có bình luận nào.
+                </div>
+              ) : (
+                <div className="admin-table-wrapper">
+                  <table className="admin-data-table">
+                    <thead>
+                      <tr>
+                        <th>Người Gửi</th>
+                        <th>Bộ Truyện & Chapter</th>
+                        <th>Nội Dung Bình Luận</th>
+                        <th>Thời Gian</th>
+                        <th style={{ width: '100px', textAlign: 'center' }}>Thao Tác</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {commentsList.map((c) => (
+                        <tr key={c.id}>
+                          <td><strong>👤 {c.userName || c.username}</strong></td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{c.storySlug}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--accent-pink)' }}>{c.chapterName && c.chapterName !== 'General' ? `Ch. ${c.chapterName}` : 'Tổng quát'}</div>
+                          </td>
+                          <td style={{ fontSize: '13px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            "{c.content}"
+                            {c.isEdited && <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic', marginLeft: '4px' }}>(đã sửa)</span>}
+                          </td>
+                          <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.createdAt ? new Date(c.createdAt).toLocaleString('vi-VN') : '—'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button className="admin-action-btn delete" onClick={() => handleDeleteComment(c.id)}>
+                              🗑️ Xóa
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
-            {/* Section B: Error Reports */}
+            {/* Section C: Error Reports */}
             <div className="admin-panel-card">
               <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '16px' }}>⚠️ Báo Cáo Lỗi Chapter Từ Độc Giả</h3>
               <div className="admin-table-wrapper">

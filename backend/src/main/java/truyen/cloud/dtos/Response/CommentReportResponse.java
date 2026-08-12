@@ -11,15 +11,18 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommentResponse {
+public class CommentReportResponse {
     private String id;
+    private String commentId;
+    private String commentContent;
+    private String commentUserName;
+    private String reporterUserId;
+    private String reporterUserName;
+    private String reason;
+    private String description;
+    private String status;
     private String storySlug;
     private String chapterName;
-    private String userId;
-    private String userName;
-    private String userAvatar;
-    private String content;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private boolean isEdited;
+    private LocalDateTime resolvedAt;
 }

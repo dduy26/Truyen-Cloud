@@ -12,5 +12,9 @@ import lombok.NoArgsConstructor;
 public class CommentRequest {
     private String storySlug;
     private String chapterName;
+    private String chapter;
     private String content;
+    private String username;
+    private String avatar;
+    private String userAvatar;
 }

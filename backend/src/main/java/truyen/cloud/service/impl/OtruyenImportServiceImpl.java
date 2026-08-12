@@ -190,6 +190,57 @@ public class OtruyenImportServiceImpl implements OtruyenImportService{
         System.out.println("✅ [Async Worker] Hoàn tất cào từ Trang " + fromPage + " đến Trang " + toPage + "! Tổng bộ truyện: " + totalStoriesImported);
     }
 
+    @Override
+    public int syncLatestNewChapters() {
+        int updatedCount = 0;
+        try {
+            String catalogUrl = otruyenApiBaseUrl + "danh-sach/truyen-moi?page=1";
+            String catalogJson = fetchJson(catalogUrl);
+            if (catalogJson != null) {
+                JsonNode root = objectMapper.readTree(catalogJson);
+                JsonNode items = root.path("data").path("items");
+                if (items.isArray()) {
+                    for (JsonNode item : items) {
+                        String slug = item.path("slug").asText();
+                        if (slug.isEmpty()) continue;
+
+                        JsonNode chaptersLatestNode = item.path("chaptersLatest");
+                        String otruyenLatestCh = "1";
+                        if (chaptersLatestNode.isArray() && chaptersLatestNode.size() > 0) {
+                            otruyenLatestCh = chaptersLatestNode.get(0).path("chapter_name").asText("1");
+                        }
+
+                        Optional<Story> storyOpt = storyRepository.findBySlug(slug);
+                        boolean isNewOrOutdated = false;
+
+                        if (storyOpt.isEmpty()) {
+                            isNewOrOutdated = true;
+                        } else {
+                            Story existing = storyOpt.get();
+                            String localLatest = existing.getLatestChapter() != null ? existing.getLatestChapter().replace("Ch. ", "").trim() : "0";
+                            if (!otruyenLatestCh.equals(localLatest)) {
+                                isNewOrOutdated = true;
+                            }
+                        }
+
+                        if (isNewOrOutdated) {
+                            try {
+                                importStoryInternal(slug);
+                                updatedCount++;
+                                System.out.println("🔄 [Auto-Sync OTruyen] Đã tự động cập nhật chap mới cho bộ: " + slug + " (Ch. " + otruyenLatestCh + ")");
+                            } catch (Exception e) {
+                                System.err.println("Lỗi auto-sync story " + slug + ": " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Lỗi chạy syncLatestNewChapters: " + e.getMessage());
+        }
+        return updatedCount;
+    }
+
     private Story importStoryInternal(String slug) throws Exception {
         String url = otruyenApiBaseUrl + "truyen-tranh/" + slug;
         String jsonResponse = fetchJson(url);

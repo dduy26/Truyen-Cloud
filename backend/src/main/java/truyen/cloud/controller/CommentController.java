@@ -20,12 +20,19 @@ import org.springframework.web.bind.annotation.*;
 public class CommentController {
     private final CommentService commentService;
 
-    // 1. Tạo bình luận mới
+    // 1. Tạo bình luận mới (Chỉ dành cho user đã đăng nhập)
     @PostMapping
     public ResponseEntity<CommentResponse> createComment(
             Authentication authentication,
             @Valid @RequestBody CommentRequest request) {
-        String username = authentication.getName();
+        String username = (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getName()))
+                ? authentication.getName()
+                : (request.getUsername() != null && !request.getUsername().trim().isEmpty() ? request.getUsername() : null);
+
+        if (username == null || "anonymousUser".equalsIgnoreCase(username) || "GUEST".equalsIgnoreCase(username)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
         CommentResponse response = commentService.createComment(username, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

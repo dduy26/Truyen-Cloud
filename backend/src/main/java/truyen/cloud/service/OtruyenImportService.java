@@ -10,5 +10,6 @@ public interface OtruyenImportService {
     List<Map<String, Object>> searchOtruyenStories(String keyword);
     void importBatchStoriesAsync(int pages);
     void importBatchStoriesAsync(int startPage, int endPage);
+    int syncLatestNewChapters();
     String formatThumbUrl(String thumbFile);
 }

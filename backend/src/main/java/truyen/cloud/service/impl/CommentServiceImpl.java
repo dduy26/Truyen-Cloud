@@ -27,15 +27,33 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public CommentResponse createComment(String username, CommentRequest request) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin người dùng: " + username));
+        if (username == null || username.trim().isEmpty()) {
+            throw new ResourceNotFoundException("Vui lòng đăng nhập để bình luận!");
+        }
 
         Comment comment = commentMapper.toEntity(request);
-        comment.setUserId(user.getId());
-        comment.setUserName(user.getUsername());
-        comment.setUserAvatar(user.getAvatar());
-        comment.setCreatedAt(LocalDateTime.now());
 
+        String effectiveChapterName = request.getChapterName() != null ? request.getChapterName() : request.getChapter();
+        if (effectiveChapterName != null) {
+            comment.setChapterName(effectiveChapterName);
+        }
+
+        userRepository.findByUsername(username).ifPresentOrElse(
+            user -> {
+                comment.setUserId(user.getId());
+                comment.setUserName(user.getUsername());
+                comment.setUserAvatar(user.getAvatar() != null ? user.getAvatar() : "");
+            },
+            () -> {
+                comment.setUserId("usr-" + System.currentTimeMillis());
+                comment.setUserName(username);
+                String avatarUrl = request.getUserAvatar() != null ? request.getUserAvatar()
+                        : (request.getAvatar() != null ? request.getAvatar() : "");
+                comment.setUserAvatar(avatarUrl);
+            }
+        );
+
+        comment.setCreatedAt(LocalDateTime.now());
         Comment savedComment = commentRepository.save(comment);
         return commentMapper.toResponse(savedComment);
     }

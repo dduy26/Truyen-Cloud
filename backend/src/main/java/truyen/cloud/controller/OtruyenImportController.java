@@ -69,6 +69,22 @@ public class OtruyenImportController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/sync-latest")
+    public ResponseEntity<Map<String, Object>> syncLatestNewChapters() {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            int updatedCount = otruyenImportService.syncLatestNewChapters();
+            response.put("success", true);
+            response.put("message", "⚡ Đã đồng bộ xong! Có " + updatedCount + " bộ truyện vừa được cập nhật chap mới nhất từ Otruyen.");
+            response.put("updatedCount", updatedCount);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Lỗi khi đồng bộ chap mới: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
     @PostMapping("/{slug}")
     public ResponseEntity<Map<String, Object>> importStoryBySlug(@PathVariable String slug) {
         Map<String, Object> response = new HashMap<>();

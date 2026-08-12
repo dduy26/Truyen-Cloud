@@ -25,7 +25,23 @@ export default function App() {
   // User state & Bookmarks list (Default: GUEST mode)
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState('GUEST'); // 'GUEST' | 'MEMBER' | 'ADMIN'
-  const [bookmarkedIds, setBookmarkedIds] = useState(new Set());
+  const [bookmarkedStories, setBookmarkedStories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mangacloud_bookmarks_list');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [bookmarkedIds, setBookmarkedIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mangacloud_bookmarks_ids');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showCategoryPopover, setShowCategoryPopover] = useState(false);
   const [showAuthorsModal, setShowAuthorsModal] = useState(false);
@@ -150,79 +166,68 @@ export default function App() {
     return story.latestChapter || 'Ch. 1';
   };
 
-  // Parse date safely handling local GMT+7 string format "2026-08-08T17:21:00", Jackson arrays, and Epoch timestamps
+  // Parse date safely handling ISO strings, Jackson arrays, and Epoch timestamps
   const parseDate = (input) => {
     if (!input) return new Date();
+    if (input instanceof Date) return input;
     if (Array.isArray(input)) {
       const [y, m, d, h, min, s] = input;
       return new Date(y, (m || 1) - 1, d || 1, h || 0, min || 0, s || 0);
     }
-    if (typeof input === 'string') {
-      const isoMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-      if (isoMatch && !input.endsWith('Z') && !input.includes('+')) {
-        const [, y, m, d, h, min, s] = isoMatch;
-        return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
-      }
+    if (typeof input === 'number') {
+      return new Date(input);
     }
-    const d = new Date(input);
-    return isNaN(d.getTime()) ? new Date() : d;
+    if (typeof input === 'string') {
+      const str = input.trim();
+      if (str.endsWith('Z') || str.includes('+')) {
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) return parsed;
+      }
+      const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+      if (match) {
+        const [, y, m, d, h, min, s] = match;
+        return new Date(
+          parseInt(y, 10),
+          parseInt(m, 10) - 1,
+          parseInt(d, 10),
+          parseInt(h || 0, 10),
+          parseInt(min || 0, 10),
+          parseInt(s || 0, 10)
+        );
+      }
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
   };
 
-  // Format relative time helper with 100% accurate local time comparison & GMT+7 drift cancellation
-  const formatRelativeTime = (dateInput, index = 0) => {
+  // Format relative time helper with 100% accurate local time comparison
+  const formatRelativeTime = (dateInput) => {
     if (!dateInput) return 'Vừa xong';
     try {
       const d = parseDate(dateInput);
       const now = new Date();
       let diffMs = now.getTime() - d.getTime();
 
-      // Cancel out GMT+7 7-hour timezone offset (7 * 3600 * 1000 = 25200000 ms)
-      if (Math.abs(diffMs - 25200000) < 600000 || Math.abs(diffMs + 25200000) < 600000) {
-        diffMs = 0;
-      }
-
-      if (diffMs <= 180000 || diffMs < 0) {
-        return 'Vừa xong';
-      }
+      if (diffMs < 0) diffMs = 0;
 
       const diffSec = Math.floor(diffMs / 1000);
       const diffMin = Math.floor(diffSec / 60);
       const diffHour = Math.floor(diffMin / 60);
       const diffDay = Math.floor(diffHour / 24);
 
-      if (diffMin < 60) return `${Math.max(1, diffMin)} phút trước`;
-      if (diffHour < 24) return `${diffHour} giờ trước`;
-      if (diffDay < 30) return `${diffDay} ngày trước`;
-    } catch (e) { }
-
-    return 'Vừa cập nhật';
-  };
-
-  // Smart relative time formatter for Chapter List
-  const formatSmartChapterTime = (updatedAt) => {
-    if (!updatedAt) return 'Vừa xong';
-    try {
-      const d = parseDate(updatedAt);
-      const now = new Date();
-      let diffMs = now.getTime() - d.getTime();
-
-      // Cancel out GMT+7 7-hour timezone offset (7 * 3600 * 1000 = 25200000 ms)
-      if (Math.abs(diffMs - 25200000) < 600000 || Math.abs(diffMs + 25200000) < 600000) {
-        diffMs = 0;
-      }
-
-      if (diffMs <= 180000 || diffMs < 0) {
+      if (diffSec < 45) {
         return 'Vừa xong';
       }
-
-      const diffSec = Math.floor(diffMs / 1000);
-      const diffMin = Math.floor(diffSec / 60);
-      const diffHour = Math.floor(diffMin / 60);
-      const diffDay = Math.floor(diffHour / 24);
-
-      if (diffMin < 60) return `${Math.max(1, diffMin)} phút trước`;
-      if (diffHour < 24) return `${diffHour} giờ trước`;
-      if (diffDay < 7) return `${diffDay} ngày trước`;
+      if (diffMin < 60) {
+        return `${Math.max(1, diffMin)} phút trước`;
+      }
+      if (diffHour < 24) {
+        return `${diffHour} giờ trước`;
+      }
+      if (diffDay < 30) {
+        return `${diffDay} ngày trước`;
+      }
 
       const day = String(d.getDate()).padStart(2, '0');
       const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -233,20 +238,109 @@ export default function App() {
     return 'Vừa xong';
   };
 
-  // Toggle Bookmark Handler
-  const toggleBookmark = (id, storyName, e) => {
-    e.stopPropagation();
-    setBookmarkedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        showToast(`Đã bỏ theo dõi: ${storyName}`);
-      } else {
-        next.add(id);
-        showToast(`❤️ Đã lưu "${storyName}" vào Theo Dõi!`);
+  // Smart relative time formatter for Chapter List
+  const formatSmartChapterTime = (updatedAt) => {
+    if (!updatedAt) return 'Vừa xong';
+    try {
+      const d = parseDate(updatedAt);
+      const now = new Date();
+      let diffMs = now.getTime() - d.getTime();
+
+      if (diffMs < 0) diffMs = 0;
+
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHour = Math.floor(diffMin / 60);
+      const diffDay = Math.floor(diffHour / 24);
+
+      if (diffSec < 45) {
+        return 'Vừa xong';
       }
-      return next;
+      if (diffMin < 60) {
+        return `${Math.max(1, diffMin)} phút trước`;
+      }
+      if (diffHour < 24) {
+        return `${diffHour} giờ trước`;
+      }
+      if (diffDay < 7) {
+        return `${diffDay} ngày trước`;
+      }
+
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (e) { }
+
+    return 'Vừa xong';
+  };
+
+  // Toggle Bookmark Handler with localStorage persistence & full story object caching
+  const toggleBookmark = (storyOrId, storyName, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    let storyObj = null;
+    let targetKey = null;
+
+    if (typeof storyOrId === 'object' && storyOrId !== null) {
+      storyObj = storyOrId;
+      targetKey = storyObj.id || storyObj.slug;
+    } else {
+      targetKey = storyOrId || selectedStory?.id || selectedStory?.slug;
+      storyObj = (selectedStory && (selectedStory.id === targetKey || selectedStory.slug === targetKey))
+        ? selectedStory
+        : (Array.isArray(stories) ? stories.find(s => String(s.id) === String(targetKey) || String(s.slug) === String(targetKey)) : null)
+        || { id: targetKey, slug: targetKey, name: storyName || 'Truyện', thumbUrl: DEFAULT_COVER_IMAGE };
+    }
+
+    if (!targetKey) return;
+    const keyStr = String(targetKey);
+    const nameStr = storyObj.name || storyName || 'Truyện';
+
+    setBookmarkedIds(prev => {
+      const nextIds = new Set(prev);
+      const isAlready = nextIds.has(keyStr) || (storyObj.slug && nextIds.has(String(storyObj.slug))) || (storyObj.id && nextIds.has(String(storyObj.id)));
+
+      let nextList = [];
+      if (isAlready) {
+        if (storyObj.id) nextIds.delete(String(storyObj.id));
+        if (storyObj.slug) nextIds.delete(String(storyObj.slug));
+        nextIds.delete(keyStr);
+
+        nextList = bookmarkedStories.filter(s => String(s.id) !== keyStr && String(s.slug) !== keyStr);
+        showToast(`Đã bỏ theo dõi: ${nameStr}`);
+      } else {
+        if (storyObj.id) nextIds.add(String(storyObj.id));
+        if (storyObj.slug) nextIds.add(String(storyObj.slug));
+        nextIds.add(keyStr);
+
+        const newEntry = {
+          id: storyObj.id || keyStr,
+          slug: storyObj.slug || keyStr,
+          name: nameStr,
+          thumbUrl: storyObj.thumbUrl || DEFAULT_COVER_IMAGE,
+          latestChapter: storyObj.latestChapter || 'Ch. 1',
+          author: storyObj.author || 'MangaCloud'
+        };
+        nextList = [newEntry, ...bookmarkedStories.filter(s => String(s.id) !== keyStr && String(s.slug) !== keyStr)];
+        showToast(`❤️ Đã lưu "${nameStr}" vào Theo Dõi!`);
+      }
+
+      setBookmarkedStories(nextList);
+      try {
+        localStorage.setItem('mangacloud_bookmarks_ids', JSON.stringify(Array.from(nextIds)));
+        localStorage.setItem('mangacloud_bookmarks_list', JSON.stringify(nextList));
+      } catch (err) { }
+
+      return nextIds;
     });
+  };
+
+  const isStoryBookmarked = (story) => {
+    if (!story) return false;
+    const idKey = story.id ? String(story.id) : null;
+    const slugKey = story.slug ? String(story.slug) : null;
+    return Boolean((idKey && bookmarkedIds.has(idKey)) || (slugKey && bookmarkedIds.has(slugKey)));
   };
 
   // Check persistent token & user session on app launch
@@ -372,27 +466,50 @@ export default function App() {
   const [chapterComments, setChapterComments] = useState([]);
   const [newCommentInput, setNewCommentInput] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+  // Story Detail Comments State
+  const [storyComments, setStoryComments] = useState([]);
+  const [newStoryCommentInput, setNewStoryCommentInput] = useState('');
+  const [storyCommentSubmitting, setStoryCommentSubmitting] = useState(false);
+  const [storyCommentPage, setStoryCommentPage] = useState(1);
+
   const [storyDetailSearchQuery, setStoryDetailSearchQuery] = useState('');
   // Live Search Autocomplete State
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
 
-  // Daily Random Recommendation State & Resolver
-  const [recommendOffset, setRecommendOffset] = useState(0);
+  // Daily Random Recommendation State & Auto Randomizer Resolver
+  const [recommendIndices, setRecommendIndices] = useState([0, 1]);
+
+  const randomizeRecommendations = () => {
+    if (!Array.isArray(stories) || stories.length < 2) return;
+    const idx1 = Math.floor(Math.random() * stories.length);
+    let idx2 = Math.floor(Math.random() * stories.length);
+    while (idx2 === idx1 && stories.length > 1) {
+      idx2 = Math.floor(Math.random() * stories.length);
+    }
+    setRecommendIndices([idx1, idx2]);
+  };
+
+  // Auto-randomize recommended stories every 12 seconds
+  useEffect(() => {
+    if (!Array.isArray(stories) || stories.length === 0) return;
+
+    randomizeRecommendations();
+
+    const timer = setInterval(() => {
+      randomizeRecommendations();
+    }, 12000);
+
+    return () => clearInterval(timer);
+  }, [stories.length]);
 
   const getTodayRecommendations = () => {
     if (!Array.isArray(stories) || stories.length === 0) return [];
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      let hash = 0;
-      for (let i = 0; i < todayStr.length; i++) {
-        hash = (hash << 5) - hash + todayStr.charCodeAt(i);
-        hash |= 0;
-      }
-      const len = stories.length;
-      const startIndex = (Math.abs(hash) + (recommendOffset || 0) * 2) % len;
-      const first = stories[startIndex] || stories[0];
-      const second = stories[(startIndex + 1) % len] || stories[1] || stories[0];
+      const [i1, i2] = recommendIndices;
+      const first = stories[i1 % stories.length] || stories[0];
+      const second = stories[i2 % stories.length] || stories[1] || stories[0];
       return [first, second].filter(item => Boolean(item && item.name));
     } catch (e) {
       return stories.slice(0, 2);
@@ -512,16 +629,22 @@ export default function App() {
 
   const loadStoryDataAndChapters = async (slug) => {
     setStoryChaptersList([]); // Clear previous story chapters state immediately!
+    setStoryComments([]);
+    setStoryCommentPage(1);
     try {
       const storyData = await api.getStoryBySlug(slug).catch(() => null);
       if (storyData) {
         setSelectedStory(storyData);
       }
+
+      const comments = await api.getCommentsByStory(slug).catch(() => []);
+      const commentsList = Array.isArray(comments) ? comments : (comments?.content || []);
+      setStoryComments(commentsList);
+
       const chapters = await api.getChaptersByStory(slug).catch(() => []);
       const storyObj = storyData || selectedStory;
       const totalCount = storyObj?.totalChapters || (storyObj?.latestChapter ? parseInt(String(storyObj.latestChapter).replace(/\D/g, ''), 10) : 0) || (Array.isArray(chapters) ? chapters.length : 0);
 
-      // Deduplicate and filter by storySlug to prevent chapter leakage between stories
       const filteredChapters = Array.isArray(chapters) ? chapters.filter(c => !c.storySlug || c.storySlug === slug) : [];
 
       if (filteredChapters.length > 0) {
@@ -533,7 +656,7 @@ export default function App() {
           return true;
         });
         uniqueChapters.sort((a, b) => parseFloat(a.chapterName || a.chapterNumber || 0) - parseFloat(b.chapterName || b.chapterNumber || 0));
-        setStoryChaptersList(uniqueChapters);
+        setStoryChaptersList(uniqueChapters.map(c => ({ ...c, storySlug: slug })));
       } else if (totalCount > 0) {
         const autoChapters = Array.from({ length: totalCount }, (_, i) => ({
           id: `ch-${slug}-${i + 1}`,
@@ -562,7 +685,6 @@ export default function App() {
         if (currentStory) setSelectedStory(currentStory);
       }
 
-      // Await real chapter detail directly from API
       let chData = await api.getChapterDetail(slug, chNum).catch(() => null);
 
       if (!chData || ((!Array.isArray(chData.imageUrls) || chData.imageUrls.length === 0) && (!Array.isArray(chData.pages) || chData.pages.length === 0))) {
@@ -576,10 +698,8 @@ export default function App() {
       setChapterDetail(chData);
 
       const comments = await api.getCommentsByChapter(slug, chNum).catch(() => []);
-      setChapterComments(Array.isArray(comments) && comments.length > 0 ? comments : [
-        { id: 'cm-1', username: 'Kuro22', avatar: profileAvatar, content: 'Chapter này đánh nhau đỉnh vãi chưởng các bác ạ 🔥 🔥', time: '5 phút trước' },
-        { id: 'cm-2', username: 'MangaFan', avatar: DEFAULT_COVER_IMAGE, content: 'Hóng chapter tiếp theo ghê! MangaCloud ra nhanh quá ❤️', time: '18 phút trước' }
-      ]);
+      const commentsList = Array.isArray(comments) ? comments : (comments?.content || []);
+      setChapterComments(commentsList);
 
       // Record reading history with REAL poster image
       try {
@@ -606,8 +726,64 @@ export default function App() {
     }
   };
 
+  const handlePostStoryComment = async (e) => {
+    e.preventDefault();
+
+    if (userRole === 'GUEST' || !user) {
+      showToast('🔒 Vui lòng đăng nhập tài khoản để gửi bình luận!', 'error');
+      openAuth('login');
+      return;
+    }
+
+    if (!newStoryCommentInput.trim()) return;
+
+    setStoryCommentSubmitting(true);
+    const commentText = newStoryCommentInput.trim();
+    setNewStoryCommentInput('');
+
+    try {
+      const slug = selectedStory?.slug || routePath.replace('/story/', '').split('/')[0];
+
+      const payload = {
+        storySlug: slug,
+        chapterName: 'General',
+        chapter: 'Truyện',
+        content: commentText,
+        username: user?.username || profileDisplayName || 'Thành viên',
+        avatar: profileAvatar || DEFAULT_USER_AVATAR,
+        userAvatar: profileAvatar || DEFAULT_USER_AVATAR
+      };
+
+      const res = await api.createComment(payload).catch(() => null);
+
+      const addedComment = res || {
+        id: `cm-${Date.now()}`,
+        storySlug: slug,
+        chapterName: 'General',
+        content: commentText,
+        userName: payload.username,
+        userAvatar: payload.userAvatar,
+        createdAt: new Date().toISOString()
+      };
+
+      setStoryComments(prev => [addedComment, ...(Array.isArray(prev) ? prev : [])]);
+      showToast('💬 Đã gửi bình luận cho bộ truyện thành công!');
+    } catch (err) {
+      showToast('Lỗi khi gửi bình luận!', 'error');
+    } finally {
+      setStoryCommentSubmitting(false);
+    }
+  };
+
   const handlePostComment = async (e) => {
     e.preventDefault();
+
+    if (userRole === 'GUEST' || !user) {
+      showToast('🔒 Vui lòng đăng nhập tài khoản để gửi bình luận!', 'error');
+      openAuth('login');
+      return;
+    }
+
     if (!newCommentInput.trim()) return;
 
     setCommentSubmitting(true);
@@ -615,28 +791,34 @@ export default function App() {
     setNewCommentInput('');
 
     try {
-      const slug = routePath.replace('/read/', '').split('/')[0];
-      const chNum = routePath.replace('/read/', '').split('/')[1] || '1';
+      const parts = routePath.replace('/read/', '').split('/')[0];
+      const slug = parts || selectedStory?.slug || 'one-piece';
+      const chNum = selectedChapter || routePath.replace('/read/', '').split('/')[1] || '1';
 
-      const newComment = {
-        id: `cm-${Date.now()}`,
+      const payload = {
         storySlug: slug,
-        chapter: `Ch. ${chNum}`,
+        chapterName: String(chNum),
+        chapter: `Chương ${chNum}`,
         content: commentText,
-        username: user?.username || profileDisplayName || 'Kuro22 (Member)',
+        username: user?.username || profileDisplayName || 'Thành viên',
         avatar: profileAvatar || DEFAULT_USER_AVATAR,
-        time: 'vừa xong'
+        userAvatar: profileAvatar || DEFAULT_USER_AVATAR
       };
 
-      setChapterComments(prev => [newComment, ...(Array.isArray(prev) ? prev : [])]);
-      showToast('💬 Đã gửi bình luận thành công!');
+      const res = await api.createComment(payload).catch(() => null);
 
-      await api.createComment({
+      const addedComment = res || {
+        id: `cm-${Date.now()}`,
         storySlug: slug,
-        chapter: `Ch. ${chNum}`,
+        chapterName: chNum,
         content: commentText,
-        username: newComment.username
-      }).catch(() => null);
+        userName: payload.username,
+        userAvatar: payload.userAvatar,
+        createdAt: new Date().toISOString()
+      };
+
+      setChapterComments(prev => [addedComment, ...(Array.isArray(prev) ? prev : [])]);
+      showToast('💬 Đã gửi bình luận thành công!');
     } catch (err) {
       showToast('Lỗi khi gửi bình luận!', 'error');
     } finally {
@@ -1511,10 +1693,10 @@ export default function App() {
                   cursor: 'pointer',
                   fontWeight: 600
                 }}
-                onClick={() => setRecommendOffset(prev => prev + 1)}
-                title="Đổi bộ 2 truyện đề cử khác"
+                onClick={randomizeRecommendations}
+                title="Tự động xoay xở hoặc bấm để đổi 2 truyện ngẫu nhiên"
               >
-                🔄 Đổi đề cử khác
+                🎲 Random Đề Cử Khác
               </button>
             </div>
 
@@ -1580,9 +1762,9 @@ export default function App() {
             </div>
             <div className="manga-grid-6">
               {topViewStories.map((story, idx) => {
-                const isBookmarked = bookmarkedIds.has(story.id);
+                const isBookmarked = isStoryBookmarked(story);
                 return (
-                  <div key={story.id || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
+                  <div key={story.id || story.slug || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
                     <div className="manga-cover-wrapper">
                       <div className="cover-badges-left">
                         <span className="manga-time-badge">🕒 {formatRelativeTime(story.updateAt, idx)}</span>
@@ -1592,7 +1774,7 @@ export default function App() {
                       <button
                         className={`bookmark-btn ${isBookmarked ? 'active' : ''}`}
                         title={isBookmarked ? 'Bỏ theo dõi' : 'Thêm vào Theo Dõi'}
-                        onClick={(e) => toggleBookmark(story.id, story.name, e)}
+                        onClick={(e) => toggleBookmark(story, story.name, e)}
                       >
                         {isBookmarked ? '❤️' : '🤍'}
                       </button>
@@ -1625,9 +1807,9 @@ export default function App() {
             </div>
             <div className="manga-grid-6">
               {featuredStories.map((story, idx) => {
-                const isBookmarked = bookmarkedIds.has(story.id);
+                const isBookmarked = isStoryBookmarked(story);
                 return (
-                  <div key={story.id || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
+                  <div key={story.id || story.slug || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
                     <div className="manga-cover-wrapper">
                       <div className="cover-badges-left">
                         <span className="manga-time-badge">🕒 {formatRelativeTime(story.updateAt, idx + 4)}</span>
@@ -1637,7 +1819,7 @@ export default function App() {
                       <button
                         className={`bookmark-btn ${isBookmarked ? 'active' : ''}`}
                         title={isBookmarked ? 'Bỏ theo dõi' : 'Thêm vào Theo Dõi'}
-                        onClick={(e) => toggleBookmark(story.id, story.name, e)}
+                        onClick={(e) => toggleBookmark(story, story.name, e)}
                       >
                         {isBookmarked ? '❤️' : '🤍'}
                       </button>
@@ -1670,9 +1852,9 @@ export default function App() {
             </div>
             <div className="manga-grid-6">
               {latestStories.map((story, idx) => {
-                const isBookmarked = bookmarkedIds.has(story.id);
+                const isBookmarked = isStoryBookmarked(story);
                 return (
-                  <div key={story.id || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
+                  <div key={story.id || story.slug || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
                     <div className="manga-cover-wrapper">
                       <div className="cover-badges-left">
                         <span className="manga-time-badge">
@@ -1683,7 +1865,7 @@ export default function App() {
                       <button
                         className={`bookmark-btn ${isBookmarked ? 'active' : ''}`}
                         title={isBookmarked ? 'Bỏ theo dõi' : 'Thêm vào Theo Dõi'}
-                        onClick={(e) => toggleBookmark(story.id, story.name, e)}
+                        onClick={(e) => toggleBookmark(story, story.name, e)}
                       >
                         {isBookmarked ? '❤️' : '🤍'}
                       </button>
@@ -1716,9 +1898,9 @@ export default function App() {
             </div>
             <div className="manga-grid-6">
               {safeUpcomingStories.map((story, idx) => {
-                const isBookmarked = bookmarkedIds.has(story.id);
+                const isBookmarked = isStoryBookmarked(story);
                 return (
-                  <div key={story.id || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
+                  <div key={story.id || story.slug || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
                     <div className="manga-cover-wrapper">
                       <div className="cover-badges-left">
                         <span className="manga-hot-badge" style={{ backgroundColor: '#f59e0b' }}>🔥 SẮP RA MẮT</span>
@@ -1951,13 +2133,13 @@ export default function App() {
                   ) : (
                     <div className="manga-grid-6" style={{ marginBottom: '32px' }}>
                       {currentStories.map((story, idx) => {
-                        const isBookmarked = bookmarkedIds.has(story.id);
+                        const isBookmarked = isStoryBookmarked(story);
                         return (
-                          <div key={story.id || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
+                          <div key={story.id || story.slug || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
                             <div className="manga-cover-wrapper">
                               <div className="cover-badges-left">
                                 <span className="manga-time-badge">
-                                  🕒 {formatRelativeTime(story.updateAt, idx)}
+                                  🕒 {formatRelativeTime(story.updateAt)}
                                 </span>
                                 {(story.viewCount > 300000 || idx < 3) && <span className="manga-hot-badge">HOT</span>}
                               </div>
@@ -1965,7 +2147,7 @@ export default function App() {
                               <button
                                 className={`bookmark-btn ${isBookmarked ? 'active' : ''}`}
                                 title={isBookmarked ? 'Bỏ theo dõi' : 'Thêm vào Theo Dõi'}
-                                onClick={(e) => toggleBookmark(story.id, story.name, e)}
+                                onClick={(e) => toggleBookmark(story, story.name, e)}
                               >
                                 {isBookmarked ? '❤️' : '🤍'}
                               </button>
@@ -2225,7 +2407,7 @@ export default function App() {
               {/* QUICK STATS CARDS */}
               <div style={{ display: 'flex', gap: '16px' }}>
                 <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '12px 20px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent-pink)' }}>{bookmarkedIds.size}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent-pink)' }}>{bookmarkedStories.length}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>❤️ Theo dõi</div>
                 </div>
                 <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '12px 20px', textAlign: 'center' }}>
@@ -2276,7 +2458,7 @@ export default function App() {
                 }}
                 onClick={() => setProfileTab('bookmarks')}
               >
-                ❤️ Truyện Đã Theo Dõi ({bookmarkedIds.size})
+                ❤️ Truyện Đã Theo Dõi ({bookmarkedStories.length})
               </button>
 
               <button
@@ -2468,7 +2650,7 @@ export default function App() {
             {/* TAB 2: FOLLOWED MANGA */}
             {profileTab === 'bookmarks' && (
               <div>
-                {bookmarkedIds.size === 0 ? (
+                {bookmarkedStories.length === 0 ? (
                   <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     <div style={{ fontSize: '40px', marginBottom: '12px' }}>❤️</div>
                     <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -2481,13 +2663,13 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="manga-grid-6">
-                    {stories.filter(s => bookmarkedIds.has(s.id)).map((story, idx) => (
-                      <div key={story.id || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
+                    {bookmarkedStories.map((story, idx) => (
+                      <div key={story.id || story.slug || idx} className="manga-card" onClick={() => navigate(`/story/${story.slug}`)}>
                         <div className="manga-cover-wrapper">
                           <button
                             className="bookmark-btn active"
                             title="Bỏ theo dõi"
-                            onClick={(e) => toggleBookmark(story.id, story.name, e)}
+                            onClick={(e) => toggleBookmark(story, story.name, e)}
                           >
                             ❤️
                           </button>
@@ -2502,7 +2684,7 @@ export default function App() {
                           <div className="manga-card-title">{story.name}</div>
                           <div className="manga-card-meta">
                             <span className="manga-chapter-text">{story.latestChapter || 'Ch. 1'}</span>
-                            <span className="manga-author-text">👤 {story.author || 'Maslow'}</span>
+                            <span className="manga-author-text">👤 {story.author || 'MangaCloud'}</span>
                           </div>
                         </div>
                       </div>
@@ -2772,10 +2954,10 @@ export default function App() {
                   <button
                     type="button"
                     className="btn-primary"
-                    style={{ backgroundColor: bookmarkedIds.has(selectedStory.id) ? '#ec4899' : '#f43f5e', padding: '10px 20px', fontSize: '13px', fontWeight: 700 }}
-                    onClick={(e) => toggleBookmark(selectedStory.id, selectedStory.name, e)}
+                    style={{ backgroundColor: isStoryBookmarked(selectedStory) ? '#ec4899' : '#f43f5e', padding: '10px 20px', fontSize: '13px', fontWeight: 700 }}
+                    onClick={(e) => toggleBookmark(selectedStory, selectedStory?.name, e)}
                   >
-                    {bookmarkedIds.has(selectedStory.id) ? '❤️ Đã theo dõi' : '❤️ Theo dõi'}
+                    {isStoryBookmarked(selectedStory) ? '❤️ Đã theo dõi' : '❤️ Theo dõi'}
                   </button>
 
                   <button
@@ -2870,7 +3052,22 @@ export default function App() {
                 <table className="admin-data-table" style={{ width: '100%' }}>
                   <tbody>
                     {(() => {
-                      let chaptersList = (storyChaptersList || []).filter(c => c.storySlug === selectedStory.slug);
+                      let chaptersList = (storyChaptersList && storyChaptersList.length > 0)
+                        ? storyChaptersList
+                        : [];
+
+                      if (chaptersList.length === 0 && selectedStory) {
+                        const total = selectedStory.totalChapters || (selectedStory.latestChapter ? parseInt(String(selectedStory.latestChapter).replace(/\D/g, ''), 10) : 0) || 0;
+                        if (total > 0) {
+                          chaptersList = Array.from({ length: total }, (_, i) => ({
+                            id: `ch-${selectedStory.slug}-${i + 1}`,
+                            storySlug: selectedStory.slug,
+                            chapterName: String(i + 1),
+                            chapterNumber: String(i + 1),
+                            chapterTitle: `Chương ${i + 1}`
+                          }));
+                        }
+                      }
 
                       const seen = new Set();
                       const unique = chaptersList.filter(c => {
@@ -2925,6 +3122,159 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* 5. DANH SÁCH BÌNH LUẬN TRUYỆN SECTION (Dưới danh sách chương) */}
+            <div style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: 'var(--shadow-sm)',
+              marginTop: '24px'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                💬 Bình Luận Về Bộ Truyện ({storyComments.length})
+              </h3>
+
+              {userRole === 'GUEST' || !user ? (
+                <div style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px dashed var(--border-color)',
+                  borderRadius: '14px',
+                  padding: '20px',
+                  textAlign: 'center',
+                  marginBottom: '20px'
+                }}>
+                  <span style={{ fontSize: '20px', display: 'block', marginBottom: '4px' }}>🔒</span>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    Bạn cần <strong>đăng nhập</strong> tài khoản để có quyền gửi bình luận.
+                  </div>
+                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                    <button type="button" className="btn-primary" style={{ padding: '6px 16px', fontSize: '12px', borderRadius: '8px' }} onClick={() => openAuth('login')}>
+                      🔑 Đăng Nhập
+                    </button>
+                    <button type="button" className="btn-primary" style={{ padding: '6px 16px', fontSize: '12px', borderRadius: '8px', backgroundColor: '#ec4899' }} onClick={() => openAuth('register')}>
+                      👤 Đăng Ký
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handlePostStoryComment} className="comment-input-form" style={{ marginBottom: '24px' }}>
+                  <textarea
+                    rows={3}
+                    className="form-control"
+                    placeholder={`Chia sẻ cảm nghĩ của bạn về bộ truyện ${selectedStory.name}... (Nhấn Enter để gửi)`}
+                    value={newStoryCommentInput}
+                    onChange={(e) => setNewStoryCommentInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handlePostStoryComment(e);
+                      }
+                    }}
+                    disabled={storyCommentSubmitting}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>💡 Nhấn Enter để gửi, Shift + Enter để xuống dòng</span>
+                    <button type="submit" className="btn-primary" disabled={storyCommentSubmitting || !newStoryCommentInput.trim()}>
+                      {storyCommentSubmitting ? 'Đang gửi...' : '💬 Gửi Bình Luận'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* COMMENTS LIST FOR STORY DETAIL PAGE */}
+              {(() => {
+                const COMMENTS_PER_PAGE = 10;
+                const totalPages = Math.ceil(storyComments.length / COMMENTS_PER_PAGE) || 1;
+                const currentPage = Math.min(storyCommentPage, totalPages);
+                const paginated = storyComments.slice((currentPage - 1) * COMMENTS_PER_PAGE, currentPage * COMMENTS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="comments-list">
+                      {storyComments.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                          Chưa có bình luận nào cho bộ truyện này. Hãy là người đầu tiên bình luận!
+                        </div>
+                      ) : (
+                        paginated.map((c, idx) => (
+                          <div key={c.id || idx} className="comment-card" style={{ display: 'flex', gap: '12px', padding: '14px', borderRadius: '12px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', marginBottom: '12px' }}>
+                            <img
+                              src={c.userAvatar || c.avatar || profileAvatar || DEFAULT_USER_AVATAR}
+                              alt="Avatar"
+                              style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent-pink)', flexShrink: 0 }}
+                              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_USER_AVATAR; }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div className="comment-author-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{c.userName || c.username || 'Thành Viên'}</strong>
+                                  {c.chapterName && c.chapterName !== 'General' && (
+                                    <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(236, 72, 153, 0.1)', color: 'var(--accent-pink)', fontWeight: 700 }}>
+                                      {c.chapterName.startsWith('Ch') ? c.chapterName : `Ch. ${c.chapterName}`}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  {c.createdAt ? formatRelativeTime(c.createdAt, idx) : (c.time || 'vừa xong')}
+                                </span>
+                              </div>
+                              <div className="comment-content-text" style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                {c.content}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* PAGINATION BAR */}
+                    {totalPages > 1 && (
+                      <div className="catalog-pagination" style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="page-btn"
+                          style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '6px' }}
+                          disabled={currentPage === 1}
+                          onClick={() => setStoryCommentPage(prev => Math.max(1, prev - 1))}
+                        >
+                          ‹
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
+                          <button
+                            key={pNum}
+                            type="button"
+                            className={`page-btn ${pNum === currentPage ? 'active' : ''}`}
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '12px',
+                              borderRadius: '6px',
+                              backgroundColor: pNum === currentPage ? 'var(--accent-pink)' : 'transparent',
+                              color: pNum === currentPage ? '#fff' : 'var(--text-color)',
+                              border: '1px solid var(--border-color)',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => setStoryCommentPage(pNum)}
+                          >
+                            {pNum}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="page-btn"
+                          style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '6px' }}
+                          disabled={currentPage === totalPages}
+                          onClick={() => setStoryCommentPage(prev => Math.min(totalPages, prev + 1))}
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -3042,9 +3392,9 @@ export default function App() {
                 </button>
                 <button
                   className="btn-secondary"
-                  onClick={(e) => toggleBookmark(selectedStory?.id, selectedStory?.name, e)}
+                  onClick={(e) => toggleBookmark(selectedStory, selectedStory?.name, e)}
                 >
-                  {bookmarkedIds.has(selectedStory?.id) ? '❤️ Đã Theo Dõi' : '🤍 Theo Dõi Truyện'}
+                  {isStoryBookmarked(selectedStory) ? '❤️ Đã Theo Dõi' : '🤍 Theo Dõi Truyện'}
                 </button>
                 <button
                   className="btn-primary"
@@ -3060,21 +3410,52 @@ export default function App() {
                   💬 Bình Luận Độc Giả ({chapterComments.length})
                 </h3>
 
-                <form onSubmit={handlePostComment} className="comment-input-form">
-                  <textarea
-                    rows={3}
-                    className="form-control"
-                    placeholder="Viết bình luận của bạn về chapter này..."
-                    value={newCommentInput}
-                    onChange={(e) => setNewCommentInput(e.target.value)}
-                    disabled={commentSubmitting}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                    <button type="submit" className="btn-primary" disabled={commentSubmitting || !newCommentInput.trim()}>
-                      {commentSubmitting ? 'Đang gửi...' : '💬 Gửi Bình Luận'}
-                    </button>
+                {userRole === 'GUEST' || !user ? (
+                  <div style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px dashed var(--border-color)',
+                    borderRadius: '14px',
+                    padding: '20px',
+                    textAlign: 'center',
+                    marginBottom: '20px'
+                  }}>
+                    <span style={{ fontSize: '20px', display: 'block', marginBottom: '4px' }}>🔒</span>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Bạn cần <strong>đăng nhập</strong> tài khoản để có quyền gửi bình luận.
+                    </div>
+                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                      <button type="button" className="btn-primary" style={{ padding: '6px 16px', fontSize: '12px', borderRadius: '8px' }} onClick={() => openAuth('login')}>
+                        🔑 Đăng Nhập
+                      </button>
+                      <button type="button" className="btn-primary" style={{ padding: '6px 16px', fontSize: '12px', borderRadius: '8px', backgroundColor: '#ec4899' }} onClick={() => openAuth('register')}>
+                        👤 Đăng Ký
+                      </button>
+                    </div>
                   </div>
-                </form>
+                ) : (
+                  <form onSubmit={handlePostComment} className="comment-input-form">
+                    <textarea
+                      rows={3}
+                      className="form-control"
+                      placeholder="Viết bình luận của bạn về chapter này... (Nhấn Enter để gửi)"
+                      value={newCommentInput}
+                      onChange={(e) => setNewCommentInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handlePostComment(e);
+                        }
+                      }}
+                      disabled={commentSubmitting}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>💡 Nhấn Enter để gửi, Shift + Enter để xuống dòng</span>
+                      <button type="submit" className="btn-primary" disabled={commentSubmitting || !newCommentInput.trim()}>
+                        {commentSubmitting ? 'Đang gửi...' : '💬 Gửi Bình Luận'}
+                      </button>
+                    </div>
+                  </form>
+                )}
 
                 {(() => {
                   const COMMENTS_PER_PAGE = 10;
@@ -3093,15 +3474,15 @@ export default function App() {
                           paginatedComments.map((c, idx) => (
                             <div key={c.id || idx} className="comment-card" style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', marginBottom: '10px' }}>
                               <img
-                                src={c.avatar || c.userAvatar || profileAvatar || DEFAULT_USER_AVATAR}
+                                src={c.userAvatar || c.avatar || profileAvatar || DEFAULT_USER_AVATAR}
                                 alt="Avatar"
                                 style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent-pink)', flexShrink: 0 }}
                                 onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_USER_AVATAR; }}
                               />
                               <div style={{ flex: 1 }}>
                                 <div className="comment-author-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{c.username || 'Thành Viên'}</strong>
-                                  <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.time || 'vừa xong'}</span>
+                                  <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{c.userName || c.username || 'Thành Viên'}</strong>
+                                  <span className="comment-time" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.createdAt ? formatRelativeTime(c.createdAt, idx) : (c.time || 'vừa xong')}</span>
                                 </div>
                                 <div className="comment-content-text" style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{c.content}</div>
                               </div>

@@ -168,9 +168,26 @@ export const api = {
   }).catch(() => null),
 
   // Comment & Report Moderation APIs
-  getComments: () => request('/comments').catch(() => []),
+  getComments: async () => {
+    const res = await request('/comments').catch(() => []);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.content)) return res.content;
+    return [];
+  },
 
-  getCommentsByChapter: (storySlug, chapterName) => request(`/comments/story/${storySlug}/${chapterName}`).catch(() => []),
+  getCommentsByStory: async (storySlug) => {
+    const res = await request(`/comments/story/${storySlug}`).catch(() => []);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.content)) return res.content;
+    return [];
+  },
+
+  getCommentsByChapter: async (storySlug, chapterName) => {
+    const res = await request(`/comments/story/${storySlug}/${chapterName}`).catch(() => []);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.content)) return res.content;
+    return [];
+  },
 
   createComment: (commentData) => request('/comments', {
     method: 'POST',

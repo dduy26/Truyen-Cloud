@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1/comments")
 @RequiredArgsConstructor
@@ -37,7 +39,15 @@ public class CommentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // 2. Lấy bình luận của 1 bộ truyện
+    // 2. Lấy tất cả bình luận (Admin dashboard)
+    @GetMapping
+    public ResponseEntity<Page<CommentResponse>> getAllComments(
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        Page<CommentResponse> response = commentService.getAllComments(pageable);
+        return ResponseEntity.ok(response);
+    }
+
+    // 3. Lấy bình luận của 1 bộ truyện
     @GetMapping("/story/{storySlug}")
     public ResponseEntity<Page<CommentResponse>> getCommentsByStory(
             @PathVariable String storySlug,
@@ -46,7 +56,7 @@ public class CommentController {
         return ResponseEntity.ok(response);
     }
 
-    // 3. Lấy bình luận của 1 chapter cụ thể trong truyện
+    // 4. Lấy bình luận của 1 chapter cụ thể trong truyện
     @GetMapping("/story/{storySlug}/{chapterName}")
     public ResponseEntity<Page<CommentResponse>> getCommentsByChapter(
             @PathVariable String storySlug,
@@ -56,7 +66,22 @@ public class CommentController {
         return ResponseEntity.ok(response);
     }
 
-    // 4. Xóa bình luận theo ID
+    // 5. Chỉnh sửa bình luận (Chỉ owner mới được sửa)
+    @PutMapping("/{id}")
+    public ResponseEntity<CommentResponse> updateComment(
+            @PathVariable String id,
+            Authentication authentication,
+            @RequestBody Map<String, String> body) {
+        String currentUsername = authentication.getName();
+        String newContent = body.get("content");
+        if (newContent == null || newContent.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        CommentResponse response = commentService.updateComment(id, currentUsername, newContent.trim());
+        return ResponseEntity.ok(response);
+    }
+
+    // 6. Xóa bình luận theo ID (Owner hoặc Admin)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteComment(
             @PathVariable String id,

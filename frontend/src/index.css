@@ -1714,6 +1714,88 @@ select option {
   line-height: 1.5;
 }
 
+/* Comment Action Buttons */
+.comment-actions-menu {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.comment-card:hover .comment-actions-menu {
+  opacity: 1;
+}
+
+.comment-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.comment-action-btn:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.comment-action-btn.edit:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.comment-action-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.comment-action-btn.report:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+/* Comment Edit Form */
+.comment-edit-form {
+  margin-top: 6px;
+}
+
+.comment-edit-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--accent-pink);
+  border-radius: 10px;
+  background: var(--bg-body);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.comment-edit-textarea:focus {
+  border-color: var(--accent-purple, #8b5cf6);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* Report Modal Extras */
+.report-modal {
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .chapter-row-item {
   display: flex;
   justify-content: space-between;

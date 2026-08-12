@@ -70,6 +70,27 @@ public class ChapterServiceImpl implements ChapterService{
         if (chapters.isEmpty()) {
             chapters = fetchAndPopulateChaptersOnDemand(storySlug);
         }
+        
+        // Auto-sync story's latestChapter & totalChapters with actual chapter count
+        if (!chapters.isEmpty()) {
+            final List<Chapter> finalChapters = chapters;
+            storyRepository.findBySlug(storySlug).ifPresent(story -> {
+                story.setTotalChapters(finalChapters.size());
+                finalChapters.stream()
+                        .map(Chapter::getChapterName)
+                        .filter(n -> n != null && !n.isEmpty())
+                        .max((a, b) -> {
+                            try {
+                                return Float.compare(Float.parseFloat(a), Float.parseFloat(b));
+                            } catch (Exception e) {
+                                return a.compareTo(b);
+                            }
+                        })
+                        .ifPresent(maxCh -> story.setLatestChapter("Ch. " + maxCh));
+                storyRepository.save(story);
+            });
+        }
+        
         return chapterMapper.toResponseList(chapters);
     }
 

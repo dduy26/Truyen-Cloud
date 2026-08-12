@@ -198,6 +198,35 @@ export const api = {
     method: 'DELETE',
   }).catch(() => null),
 
+  updateComment: (id, content) => request(`/comments/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  }),
+
+  // Comment Report APIs
+  reportComment: (data) => request('/comment-reports', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  getCommentReports: async () => {
+    const res = await request('/comment-reports').catch(() => []);
+    if (Array.isArray(res)) return res;
+    return [];
+  },
+
+  resolveCommentReport: (id) => request(`/comment-reports/${id}/resolve`, {
+    method: 'PATCH',
+  }).catch(() => null),
+
+  dismissCommentReport: (id) => request(`/comment-reports/${id}/dismiss`, {
+    method: 'PATCH',
+  }).catch(() => null),
+
+  deleteCommentReport: (id) => request(`/comment-reports/${id}`, {
+    method: 'DELETE',
+  }).catch(() => null),
+
   getChapterReports: () => request('/reports').catch(() => []),
 
   resolveReport: (id) => request(`/reports/${id}/resolve`, {

@@ -26,19 +26,22 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 @Service
-@RequiredArgsConstructor
 public class ChapterServiceImpl implements ChapterService{
     private final ChapterRepository chapterRepository;
     private final StoryRepository storyRepository;
     private final ChapterMapper chapterMapper;
-    private final RestTemplate restTemplate = createRestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static RestTemplate createRestTemplate() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+    public ChapterServiceImpl(ChapterRepository chapterRepository, StoryRepository storyRepository, ChapterMapper chapterMapper) {
+        this.chapterRepository = chapterRepository;
+        this.storyRepository = storyRepository;
+        this.chapterMapper = chapterMapper;
+
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
-        factory.setReadTimeout(4000);
-        return new RestTemplate(factory);
+        factory.setReadTimeout(5000);
+        this.restTemplate = new RestTemplate(factory);
     }
 
     @Override

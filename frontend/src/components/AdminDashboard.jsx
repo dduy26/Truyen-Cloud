@@ -1902,7 +1902,13 @@ export default function AdminDashboard({
                     className="form-control"
                     style={{ padding: '6px 10px', marginTop: '4px' }}
                     value={startPageInput}
-                    onChange={(e) => setStartPageInput(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const start = Math.max(1, parseInt(e.target.value) || 1);
+                      setStartPageInput(start);
+                      if (endPageInput < start) {
+                        setEndPageInput(start + 4);
+                      }
+                    }}
                   />
                 </div>
                 <div>
@@ -1920,10 +1926,13 @@ export default function AdminDashboard({
                   type="button"
                   className="btn-primary"
                   style={{ backgroundColor: '#8b5cf6', marginTop: '18px', padding: '8px 12px', fontSize: '13px' }}
-                  onClick={() => handleBatchImport(startPageInput, endPageInput)}
+                  onClick={() => {
+                    const effectiveEnd = Math.max(startPageInput, endPageInput);
+                    handleBatchImport(startPageInput, effectiveEnd);
+                  }}
                   disabled={isImporting}
                 >
-                  Đồng Bộ Trang {startPageInput} → {endPageInput}
+                  Đồng Bộ Trang {startPageInput} → {Math.max(startPageInput, endPageInput)}
                 </button>
               </div>
             </div>

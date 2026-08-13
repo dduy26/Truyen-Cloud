@@ -134,10 +134,13 @@ export default function App() {
     if (!url || typeof url !== 'string' || url.trim() === '' || url.startsWith('blob:')) {
       return DEFAULT_COVER_IMAGE;
     }
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return `https://otruyenapi.com/uploads/comics/${url.replace(/^\/+/, '')}`;
+    let res = url.trim();
+    // Normalize any otruyenapi domain variations to img.otruyenapi.com
+    res = res.replace(/https?:\/\/(img\.)*otruyenapi\.com/g, 'https://img.otruyenapi.com');
+    if (!res.startsWith('http://') && !res.startsWith('https://')) {
+      res = `https://img.otruyenapi.com/uploads/comics/${res.replace(/^\/+/, '')}`;
     }
-    return url;
+    return res;
   };
 
   const getStoryPosterUrl = (storySlug, fallbackUrl) => {
@@ -352,20 +355,30 @@ export default function App() {
 
   // Check persistent token & user session on app launch
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // Migrate legacy 'token' key if found
+    const legacyToken = localStorage.getItem('token');
+    if (legacyToken) {
+      if (!localStorage.getItem('accessToken')) {
+        localStorage.setItem('accessToken', legacyToken);
+      }
+      localStorage.removeItem('token');
+    }
+
+    // Clean up isolated legacy keys if present
+    localStorage.removeItem('roles');
+    localStorage.removeItem('username');
+
+    const accessToken = localStorage.getItem('accessToken');
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
-        const roleStr = parsedUser.role || (Array.isArray(parsedUser.roles) ? parsedUser.roles[0] : null) || 'ROLE_MEMBER';
-        const isSystemAdmin = roleStr === 'ROLE_ADMIN' || roleStr.includes('ADMIN');
+        const rolesList = Array.isArray(parsedUser.roles) ? parsedUser.roles : (parsedUser.role ? [parsedUser.role] : []);
+        const isSystemAdmin = rolesList.includes('ROLE_ADMIN') || rolesList.some(r => String(r).includes('ADMIN'));
         setUserRole(isSystemAdmin ? 'ADMIN' : 'MEMBER');
-        if (!token) {
-          localStorage.setItem('token', parsedUser.token || ('session_token_' + Date.now()));
-        }
       } catch (e) {
-        localStorage.removeItem('token');
+        localStorage.removeItem('accessToken');
         localStorage.removeItem('user');
       }
     }
@@ -389,18 +402,23 @@ export default function App() {
       try {
         // Call Backend API POST /api/v1/auth/login
         const res = await api.login(authEmail, authPassword);
-        const roleStr = res.role || res.roles?.[0] || (authEmail.includes('admin') ? 'ROLE_ADMIN' : 'ROLE_MEMBER');
-        const isSystemAdmin = roleStr === 'ROLE_ADMIN' || roleStr.includes('ADMIN');
+        const rolesList = res.roles || (res.role ? [res.role] : []);
+        const isSystemAdmin = rolesList.includes('ROLE_ADMIN') || rolesList.some(r => String(r).includes('ADMIN')) || authEmail.includes('admin');
 
-        const tokenVal = res.token || res.accessToken || res.jwt || ('session_token_' + Date.now());
+        const accessTokenVal = res.accessToken || res.token || res.jwt;
+        if (accessTokenVal) {
+          localStorage.setItem('accessToken', accessTokenVal);
+          localStorage.removeItem('token');
+        }
+
         const userData = {
+          id: res.id,
           username: res.username || authEmail.split('@')[0],
           email: res.email || authEmail,
-          role: roleStr,
-          token: tokenVal
+          roles: rolesList.length > 0 ? rolesList : ['ROLE_MEMBER'],
+          avatar: res.avatar || null
         };
 
-        localStorage.setItem('token', tokenVal);
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
         setUserRole(isSystemAdmin ? 'ADMIN' : 'MEMBER');
@@ -436,15 +454,21 @@ export default function App() {
           password: authPassword
         });
 
-        const tokenVal = res.token || res.accessToken || res.jwt || ('session_token_' + Date.now());
+        const rolesList = res.roles || (res.role ? [res.role] : ['ROLE_USER']);
+        const accessTokenVal = res.accessToken || res.token || res.jwt;
+        if (accessTokenVal) {
+          localStorage.setItem('accessToken', accessTokenVal);
+          localStorage.removeItem('token');
+        }
+
         const userData = {
+          id: res.id,
           username: res.username || authUsername,
           email: res.email || authEmail,
-          role: res.role || 'ROLE_MEMBER',
-          token: tokenVal
+          roles: rolesList,
+          avatar: res.avatar || null
         };
 
-        localStorage.setItem('token', tokenVal);
         localStorage.setItem('user', JSON.stringify(userData));
 
         setUser(userData);
@@ -554,13 +578,24 @@ export default function App() {
   const [profileDisplayName, setProfileDisplayName] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
   const [profileAvatar, setProfileAvatar] = useState(() => {
-    return localStorage.getItem('truyencloud_avatar') || DEFAULT_USER_AVATAR;
+    const legacy = localStorage.getItem('truyencloud_avatar');
+    if (legacy) {
+      localStorage.setItem('mangacloud_avatar', legacy);
+      localStorage.removeItem('truyencloud_avatar');
+      return legacy;
+    }
+    return localStorage.getItem('mangacloud_avatar') || DEFAULT_USER_AVATAR;
   });
   const [profileOldPassword, setProfileOldPassword] = useState('');
   const [profileNewPassword, setProfileNewPassword] = useState('');
   const [readingHistory, setReadingHistory] = useState(() => {
     try {
-      const saved = localStorage.getItem('truyencloud_history');
+      const legacyHistory = localStorage.getItem('truyencloud_history');
+      if (legacyHistory) {
+        localStorage.setItem('mangacloud_history', legacyHistory);
+        localStorage.removeItem('truyencloud_history');
+      }
+      const saved = localStorage.getItem('mangacloud_history');
       return saved ? JSON.parse(saved) : [
         { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/solo-leveling-thumb.jpg', readAt: new Date(Date.now() - 3600000).toISOString() },
         { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/one-piece-thumb.jpg', readAt: new Date(Date.now() - 86400000).toISOString() }
@@ -683,15 +718,6 @@ export default function App() {
             latestChapter: maxChNum.startsWith('Ch') ? maxChNum : `Ch. ${maxChNum}`
           } : prev);
         }
-      } else if (totalCount > 0) {
-        const autoChapters = Array.from({ length: totalCount }, (_, i) => ({
-          id: `ch-${slug}-${i + 1}`,
-          storySlug: slug,
-          chapterName: String(i + 1),
-          chapterNumber: String(i + 1),
-          chapterTitle: `Chương ${i + 1}`
-        }));
-        setStoryChaptersList(autoChapters);
       } else {
         setStoryChaptersList([]);
       }

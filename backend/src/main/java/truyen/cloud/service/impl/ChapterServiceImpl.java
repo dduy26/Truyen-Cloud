@@ -4,6 +4,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.springframework.scheduling.annotation.Async;
 
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,13 +19,13 @@ import truyen.cloud.model.Chapter;
 import truyen.cloud.repository.ChapterRepository;
 import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.ChapterService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 @Service
@@ -45,6 +48,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "chapter_detail"}, allEntries = true)
     public ChapterResponse createChapter(ChapterRequest request) {
         Chapter chapter = chapterMapper.toEntity(request);
         chapter.setUpdatedAt(LocalDateTime.now());
@@ -95,6 +99,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @Cacheable(value = "chapter_detail", key = "#storySlug + ':' + #chapterName")
     public ChapterResponse getChapterDetail(String storySlug, String chapterName) {
         Optional<Chapter> chapterOpt = chapterRepository.findByStorySlugAndChapterName(storySlug, chapterName);
         Chapter chapter = null;
@@ -176,18 +181,24 @@ public class ChapterServiceImpl implements ChapterService{
                 if (chaptersNode.isArray() && chaptersNode.size() > 0) {
                     JsonNode serverData = chaptersNode.get(0).path("server_data");
                     if (serverData.isArray()) {
+                        List<Chapter> existingList = chapterRepository.findByStorySlug(storySlug);
+                        Map<String, Chapter> existingMap = existingList.stream()
+                                .collect(Collectors.toMap(Chapter::getChapterName, c -> c, (a, b) -> a));
+
                         for (int i = 0; i < serverData.size(); i++) {
                             JsonNode chNode = serverData.get(i);
                             String chName = chNode.path("chapter_name").asText();
                             String chTitle = chNode.path("chapter_title").asText("Chapter " + chName);
                             String chapterApiUrl = chNode.path("chapter_api_data").asText();
 
-                            Optional<Chapter> existingCh = chapterRepository.findByStorySlugAndChapterName(storySlug, chName);
-                            Chapter chapterEntity = existingCh.orElseGet(() -> Chapter.builder()
-                                    .storySlug(storySlug)
-                                    .chapterName(chName)
-                                    .updatedAt(LocalDateTime.now())
-                                    .build());
+                            Chapter chapterEntity = existingMap.get(chName);
+                            if (chapterEntity == null) {
+                                chapterEntity = Chapter.builder()
+                                        .storySlug(storySlug)
+                                        .chapterName(chName)
+                                        .updatedAt(LocalDateTime.now())
+                                        .build();
+                            }
 
                             chapterEntity.setChapterTitle(chTitle);
                             chapterEntity.setChapterApiUrl(chapterApiUrl);
@@ -237,6 +248,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "chapter_detail"}, allEntries = true)
     public ChapterResponse updateChapter(String id, ChapterRequest request) {
         Chapter chapter = chapterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chương với id: " + id));
@@ -255,6 +267,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "chapter_detail"}, allEntries = true)
     public void deleteChapter(String id) {
         if (!chapterRepository.existsById(id)) {
             throw new ResourceNotFoundException("Không tìm thấy chương để xóa với id: " + id);

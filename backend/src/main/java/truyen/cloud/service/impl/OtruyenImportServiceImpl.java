@@ -8,6 +8,7 @@ import truyen.cloud.repository.ChapterRepository;
 import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.OtruyenImportService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.CacheManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +29,7 @@ import java.util.*;
 public class OtruyenImportServiceImpl implements OtruyenImportService{
     private final StoryRepository storyRepository;
     private final ChapterRepository chapterRepository;
+    private final CacheManager cacheManager;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -43,6 +45,22 @@ public class OtruyenImportServiceImpl implements OtruyenImportService{
             return "";
         }
         return thumbFile.startsWith("http") ? thumbFile : otruyenCdnUrl + thumbFile;
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void ensureAllStoriesPublic() {
+        try {
+            List<Story> allStories = storyRepository.findAll();
+            if (!allStories.isEmpty()) {
+                for (Story s : allStories) {
+                    s.setPublic(true);
+                }
+                storyRepository.saveAll(allStories);
+                clearAllStoryCaches();
+            }
+        } catch (Exception e) {
+            System.err.println("Lỗi ensureAllStoriesPublic: " + e.getMessage());
+        }
     }
 
     private String fetchJson(String url) {
@@ -172,6 +190,7 @@ public class OtruyenImportServiceImpl implements OtruyenImportService{
                                     storyEntity.setThumbUrl(thumbUrl);
                                     storyEntity.setLatestChapter("Ch. " + latestChNum);
                                     storyEntity.setTotalChapters(totalChCount);
+                                    storyEntity.setPublic(true);
                                     storyEntity.setUpdateAt(LocalDateTime.now());
 
                                     storyRepository.save(storyEntity);
@@ -187,7 +206,21 @@ public class OtruyenImportServiceImpl implements OtruyenImportService{
                 }
             }
         }
+        clearAllStoryCaches();
         System.out.println("✅ [Async Worker] Hoàn tất cào từ Trang " + fromPage + " đến Trang " + toPage + "! Tổng bộ truyện: " + totalStoriesImported);
+    }
+
+    private void clearAllStoryCaches() {
+        try {
+            if (cacheManager != null) {
+                var listCache = cacheManager.getCache("stories_list");
+                if (listCache != null) listCache.clear();
+                var detailCache = cacheManager.getCache("stories_detail");
+                if (detailCache != null) detailCache.clear();
+            }
+        } catch (Exception e) {
+            System.err.println("Lỗi khi clear Redis cache: " + e.getMessage());
+        }
     }
 
     @Override

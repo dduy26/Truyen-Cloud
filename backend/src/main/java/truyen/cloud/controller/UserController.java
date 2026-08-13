@@ -3,6 +3,7 @@ package truyen.cloud.controller;
 import truyen.cloud.dtos.response.UserResponse;
 import truyen.cloud.model.User;
 import truyen.cloud.repository.UserRepository;
+import truyen.cloud.service.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserController {
     private final UserRepository userRepository;
+    private final RedisTokenService redisTokenService;
 
     // 1. Lấy danh sách tất cả người dùng trong hệ thống
     @GetMapping
@@ -47,8 +49,13 @@ public class UserController {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với ID: " + id));
 
         String status = payload.getOrDefault("status", "ACTIVE");
-        user.setActive("ACTIVE".equalsIgnoreCase(status));
+        boolean isActive = "ACTIVE".equalsIgnoreCase(status);
+        user.setActive(isActive);
         userRepository.save(user);
+
+        if (!isActive) {
+            redisTokenService.deleteRefreshToken(user.getUsername());
+        }
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         UserResponse response = UserResponse.builder()

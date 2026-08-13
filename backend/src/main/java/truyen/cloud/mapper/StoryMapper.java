@@ -12,6 +12,7 @@ import java.util.List;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE, nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
 public interface StoryMapper {
 
+    @Mapping(target = "isPublic", expression = "java(story.isPublic())")
     StoryResponse toResponse(Story story);
 
     List<StoryResponse> toResponseList(List<Story> stories);

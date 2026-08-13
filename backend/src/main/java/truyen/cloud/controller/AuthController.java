@@ -4,10 +4,17 @@ import truyen.cloud.dtos.request.LoginRequest;
 import truyen.cloud.dtos.request.RegisterRequest;
 import truyen.cloud.dtos.response.AuthResponse;
 import truyen.cloud.dtos.response.UserResponse;
+import truyen.cloud.service.RedisTokenService;
 import truyen.cloud.service.UserService;
+import truyen.cloud.util.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Map;
+
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -17,17 +24,96 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AuthController {
     private final UserService userService;
+    private final JwtUtil jwtUtil;
+    private final RedisTokenService redisTokenService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = userService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
+        String refreshToken = jwtUtil.generateRefreshToken(response.getUsername());
+        redisTokenService.saveRefreshToken(response.getUsername(), refreshToken, jwtUtil.getRefreshTokenExpiration());
+
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", refreshToken)
+            .httpOnly(true)
+            .secure(false) 
+            .path("/")
+            .maxAge(7 * 24 * 60 * 60) // 7 ngày
+            .sameSite("Lax")
+            .build();
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .header(HttpHeaders.SET_COOKIE, cookie.toString())
+            .body(response);
     }
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = userService.login(request);
-        return ResponseEntity.ok(response);
+
+        String refreshToken = jwtUtil.generateRefreshToken(response.getUsername());
+        redisTokenService.saveRefreshToken(response.getUsername(), refreshToken, jwtUtil.getRefreshTokenExpiration());
+
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", refreshToken)
+            .httpOnly(true)
+            .secure(false) 
+            .path("/")
+            .maxAge(7 * 24 * 60 * 60) // 7 ngày
+            .sameSite("Lax")
+            .build();
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, cookie.toString())
+            .body(response);
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<?> refreshToken(@CookieValue(name = "refreshToken", required = false) String refreshToken) {
+        if (refreshToken == null || !jwtUtil.validateToken(refreshToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Refresh Token không hợp lệ hoặc đã hết hạn!"));
+        }
+
+        String username = jwtUtil.extractUsername(refreshToken);
+        if (!redisTokenService.validateRefreshToken(username, refreshToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Phiên đăng nhập đã hết hạn hoặc bị thu hồi!"));
+        }
+
+        // Token Rotation: Sinh cả Access Token mới lẫn Refresh Token mới
+        String newAccessToken = jwtUtil.generateAccessToken(username);
+        String newRefreshToken = jwtUtil.generateRefreshToken(username);
+        redisTokenService.saveRefreshToken(username, newRefreshToken, jwtUtil.getRefreshTokenExpiration());
+
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", newRefreshToken)
+            .httpOnly(true)
+            .secure(false)
+            .path("/")
+            .maxAge(7 * 24 * 60 * 60)
+            .sameSite("Lax")
+            .build();
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, cookie.toString())
+            .body(Map.of("accessToken", newAccessToken, "username", username));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@CookieValue(name = "refreshToken", required = false) String refreshToken, Authentication authentication) {
+        if (authentication != null && authentication.getName() != null) {
+            redisTokenService.deleteRefreshToken(authentication.getName());
+        } else if (refreshToken != null && jwtUtil.validateToken(refreshToken)) {
+            String username = jwtUtil.extractUsername(refreshToken);
+            redisTokenService.deleteRefreshToken(username);
+        }
+
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
+            .httpOnly(true)
+            .path("/")
+            .maxAge(0)
+            .build();
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, cookie.toString())
+            .body(Map.of("message", "Đã đăng xuất!"));
     }
 
     @GetMapping("/me")

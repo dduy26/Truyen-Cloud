@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Data
 @Builder
@@ -27,6 +28,8 @@ public class StoryResponse {
     private String latestChapter;
     private int totalChapters;
     private long viewCount;
+    
+    @JsonProperty("isPublic")
     private boolean isPublic;
     private double rating;
 

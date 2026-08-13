@@ -3,23 +3,33 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
 /**
- * Generic fetch wrapper with automatic JWT header injection and 401 handling.
+ * Generic fetch wrapper with automatic JWT header injection, credentials: 'include', and automatic 401 token refresh.
  */
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, isRetry = false) {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  const token = localStorage.getItem('token');
+  // Clean up legacy token key if present
+  if (localStorage.getItem('token')) {
+    const legacyToken = localStorage.getItem('token');
+    if (!localStorage.getItem('accessToken')) {
+      localStorage.setItem('accessToken', legacyToken);
+    }
+    localStorage.removeItem('token');
+  }
+
+  const accessToken = localStorage.getItem('accessToken');
 
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
   const config = {
+    credentials: 'include',
     ...options,
     headers,
   };
@@ -29,13 +39,38 @@ async function request(endpoint, options = {}) {
 
     // 401 Unauthorized handling (Expired/Invalid Token)
     if (response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       if (endpoint === '/auth/login') {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || errorData.message || 'Sai tên tài khoản hoặc mật khẩu!');
       }
+
+      // Try automatic Refresh Token flow for expired Access Token
+      if (!isRetry && endpoint !== '/auth/refresh-token') {
+        try {
+          const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            if (refreshData?.accessToken) {
+              localStorage.setItem('accessToken', refreshData.accessToken);
+              // Retry original request with new token
+              return await request(endpoint, options, true);
+            }
+          }
+        } catch (refreshErr) {
+          console.warn('Auto refresh token failed:', refreshErr);
+        }
+      }
+
+      // If refresh failed or request was already a retry
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
     }
 
@@ -64,9 +99,18 @@ export const api = {
       body: JSON.stringify({ usernameOrEmail, password }),
     });
     if (data) {
-      const token = data.token || data.accessToken || data.jwt || 'session_token_' + Date.now();
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(data));
+      const accessToken = data.accessToken || data.token || data.jwt;
+      if (accessToken) {
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.removeItem('token');
+      }
+      const cleanUser = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        roles: data.roles || (data.role ? [data.role] : ['ROLE_MEMBER']),
+      };
+      localStorage.setItem('user', JSON.stringify(cleanUser));
     }
     return data;
   },
@@ -77,19 +121,37 @@ export const api = {
       body: JSON.stringify(userData),
     });
     if (data) {
-      const token = data.token || data.accessToken || data.jwt || 'session_token_' + Date.now();
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(data));
+      const accessToken = data.accessToken || data.token || data.jwt;
+      if (accessToken) {
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.removeItem('token');
+      }
+      const cleanUser = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        roles: data.roles || (data.role ? [data.role] : ['ROLE_MEMBER']),
+      };
+      localStorage.setItem('user', JSON.stringify(cleanUser));
     }
     return data;
   },
 
+  refreshToken: () => request('/auth/refresh-token', { method: 'POST' }),
+
   getCurrentUser: () => request('/auth/me'),
 
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+  logout: async () => {
+    try {
+      await request('/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.warn('Backend logout call failed or network offline:', e);
+    } finally {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
   },
 
   // Story Management APIs

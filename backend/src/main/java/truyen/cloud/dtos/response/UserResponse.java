@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -19,4 +20,5 @@ public class UserResponse {
     private List<String> roles;
     private String status; // "ACTIVE" | "BANNED"
     private String joinedDate;
+    private LocalDateTime createdAt;
 }

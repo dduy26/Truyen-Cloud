@@ -134,10 +134,13 @@ export default function App() {
     if (!url || typeof url !== 'string' || url.trim() === '' || url.startsWith('blob:')) {
       return DEFAULT_COVER_IMAGE;
     }
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return `https://otruyenapi.com/uploads/comics/${url.replace(/^\/+/, '')}`;
+    let res = url.trim();
+    // Normalize any otruyenapi domain variations to img.otruyenapi.com
+    res = res.replace(/https?:\/\/(img\.)*otruyenapi\.com/g, 'https://img.otruyenapi.com');
+    if (!res.startsWith('http://') && !res.startsWith('https://')) {
+      res = `https://img.otruyenapi.com/uploads/comics/${res.replace(/^\/+/, '')}`;
     }
-    return url;
+    return res;
   };
 
   const getStoryPosterUrl = (storySlug, fallbackUrl) => {
@@ -715,15 +718,6 @@ export default function App() {
             latestChapter: maxChNum.startsWith('Ch') ? maxChNum : `Ch. ${maxChNum}`
           } : prev);
         }
-      } else if (totalCount > 0) {
-        const autoChapters = Array.from({ length: totalCount }, (_, i) => ({
-          id: `ch-${slug}-${i + 1}`,
-          storySlug: slug,
-          chapterName: String(i + 1),
-          chapterNumber: String(i + 1),
-          chapterTitle: `Chương ${i + 1}`
-        }));
-        setStoryChaptersList(autoChapters);
       } else {
         setStoryChaptersList([]);
       }

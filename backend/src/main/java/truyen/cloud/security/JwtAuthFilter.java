@@ -24,46 +24,36 @@ public class JwtAuthFilter extends OncePerRequestFilter{
 
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, 
+                                    HttpServletResponse response, 
+                                    FilterChain filterChain) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
-        final String jwtToken;
-        final String username;
+        // 1. Lấy Header 'Authorization'
+        String authHeader = request.getHeader("Authorization");
+        String token = null;
+        String username = null;
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // Cắt bỏ chữ "Bearer " để lấy chuỗi Token thật
-        jwtToken = authHeader.substring(7);
-        try {
-            username = jwtUtil.extractUsername(jwtToken);
-        } catch (Exception e) {
-            // Token không hợp lệ hoặc hết hạn -> Bỏ qua cho Spring Security xử lý lỗi 401
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // Nếu lấy được Username và User chưa được Authentication trong Context
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-
-            if (jwtUtil.validateToken(jwtToken, userDetails.getUsername())) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                
-                // Cấp quyền thành công cho User trong luồng Request hiện tại
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+        // 2. Kiểm tra xem Header có dạng 'Bearer <token>' không
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7); // Cắt bỏ chữ "Bearer " lấy chuỗi Token
+            if (jwtUtil.validateToken(token)) {
+                username = jwtUtil.extractUsername(token);
             }
+        }
+
+        /// 3. Nếu Token chuẩn và chưa có Authentication trong SecurityContext
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                    userDetails,
+                    null,
+                    userDetails.getAuthorities()
+            );
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+            // Set user vào SecurityContext để Spring Security biết request này hợp lệ
+            SecurityContextHolder.getContext().setAuthentication(authToken);
         }
 
         filterChain.doFilter(request, response);

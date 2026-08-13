@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 public class UserController {
-    private final UserRepository userRepository;
+        private final UserRepository userRepository;
 
     // 1. Lấy danh sách tất cả người dùng trong hệ thống
     @GetMapping

@@ -4,6 +4,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.springframework.scheduling.annotation.Async;
 
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -178,18 +181,24 @@ public class ChapterServiceImpl implements ChapterService{
                 if (chaptersNode.isArray() && chaptersNode.size() > 0) {
                     JsonNode serverData = chaptersNode.get(0).path("server_data");
                     if (serverData.isArray()) {
+                        List<Chapter> existingList = chapterRepository.findByStorySlug(storySlug);
+                        Map<String, Chapter> existingMap = existingList.stream()
+                                .collect(Collectors.toMap(Chapter::getChapterName, c -> c, (a, b) -> a));
+
                         for (int i = 0; i < serverData.size(); i++) {
                             JsonNode chNode = serverData.get(i);
                             String chName = chNode.path("chapter_name").asText();
                             String chTitle = chNode.path("chapter_title").asText("Chapter " + chName);
                             String chapterApiUrl = chNode.path("chapter_api_data").asText();
 
-                            Optional<Chapter> existingCh = chapterRepository.findByStorySlugAndChapterName(storySlug, chName);
-                            Chapter chapterEntity = existingCh.orElseGet(() -> Chapter.builder()
-                                    .storySlug(storySlug)
-                                    .chapterName(chName)
-                                    .updatedAt(LocalDateTime.now())
-                                    .build());
+                            Chapter chapterEntity = existingMap.get(chName);
+                            if (chapterEntity == null) {
+                                chapterEntity = Chapter.builder()
+                                        .storySlug(storySlug)
+                                        .chapterName(chName)
+                                        .updatedAt(LocalDateTime.now())
+                                        .build();
+                            }
 
                             chapterEntity.setChapterTitle(chTitle);
                             chapterEntity.setChapterApiUrl(chapterApiUrl);

@@ -49,7 +49,7 @@ public class SecurityConfig {
                 .anyRequest().permitAll()
             )
 
-            .addFilterBefore(rateLimiterFilter, JwtAuthFilter.class)
+            .addFilterBefore(rateLimiterFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

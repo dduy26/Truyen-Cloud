@@ -1,6 +1,7 @@
 package truyen.cloud.config;
 
 import truyen.cloud.security.JwtAuthFilter;
+import truyen.cloud.security.RateLimiterFilter;
 import lombok.RequiredArgsConstructor; 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimiterFilter rateLimiterFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -47,6 +49,7 @@ public class SecurityConfig {
                 .anyRequest().permitAll()
             )
 
+            .addFilterBefore(rateLimiterFilter, JwtAuthFilter.class)
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

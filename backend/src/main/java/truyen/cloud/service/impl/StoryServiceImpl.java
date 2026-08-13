@@ -9,6 +9,8 @@ import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.StoryService;
 import truyen.cloud.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -25,6 +27,7 @@ public class StoryServiceImpl implements StoryService {
     private final StoryMapper storyMapper; 
 
     @Override
+    @CacheEvict(value = {"stories_detail", "stories_list", "chapter_detail"}, allEntries = true)
     public StoryResponse createStory(StoryRequest request) {
         Story story = storyMapper.toEntity(request);
 
@@ -38,6 +41,7 @@ public class StoryServiceImpl implements StoryService {
     }
 
     @Override
+    @Cacheable(value = "stories_detail", key = "#slug")
     public StoryResponse getStoryBySlug(String slug) {
         Story story = storyRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện với slug: " + slug));
@@ -50,6 +54,7 @@ public class StoryServiceImpl implements StoryService {
     }
 
     @Override
+    @Cacheable(value = "stories_list")
     public List<StoryResponse> getAllStories() {
         List<Story> stories = storyRepository.findAll();
         return storyMapper.toResponseList(stories);
@@ -82,6 +87,7 @@ public class StoryServiceImpl implements StoryService {
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "stories_list", "chapter_detail"}, allEntries = true)
     public StoryResponse updateStory(String id, StoryRequest request) {
         Story story = storyRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện với id: " + id));
@@ -102,6 +108,7 @@ public class StoryServiceImpl implements StoryService {
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "stories_list", "chapter_detail"}, allEntries = true)
     public void deleteStory(String id) {
         if (!storyRepository.existsById(id)) {
             throw new ResourceNotFoundException("Không tìm thấy truyện để xóa với id: " + id);

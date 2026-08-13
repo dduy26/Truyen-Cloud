@@ -21,6 +21,10 @@ public class JwtUtil {
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
+    public long getRefreshTokenExpiration() {
+        return refreshTokenExpiration > 0 ? refreshTokenExpiration : 7 * 24 * 60 * 60 * 1000L;
+    }
+
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     }

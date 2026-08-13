@@ -16,6 +16,8 @@ import truyen.cloud.model.Chapter;
 import truyen.cloud.repository.ChapterRepository;
 import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.ChapterService;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -43,6 +45,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "chapter_detail"}, allEntries = true)
     public ChapterResponse createChapter(ChapterRequest request) {
         Chapter chapter = chapterMapper.toEntity(request);
         chapter.setUpdatedAt(LocalDateTime.now());
@@ -93,6 +96,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @Cacheable(value = "chapter_detail", key = "#storySlug + ':' + #chapterName")
     public ChapterResponse getChapterDetail(String storySlug, String chapterName) {
         Optional<Chapter> chapterOpt = chapterRepository.findByStorySlugAndChapterName(storySlug, chapterName);
         Chapter chapter = null;
@@ -235,6 +239,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "chapter_detail"}, allEntries = true)
     public ChapterResponse updateChapter(String id, ChapterRequest request) {
         Chapter chapter = chapterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chương với id: " + id));
@@ -253,6 +258,7 @@ public class ChapterServiceImpl implements ChapterService{
     }
 
     @Override
+    @CacheEvict(value = {"stories_detail", "chapter_detail"}, allEntries = true)
     public void deleteChapter(String id) {
         if (!chapterRepository.existsById(id)) {
             throw new ResourceNotFoundException("Không tìm thấy chương để xóa với id: " + id);

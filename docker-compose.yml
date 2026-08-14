@@ -1,4 +1,3 @@
-
 name: truyencloud
 
 services:
@@ -55,6 +54,18 @@ services:
           path: ./frontend/package.json
     depends_on:
       - backend
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./nginx/Dockerfile
+    container_name: truyencloud-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - frontend
+    restart: always
 
 networks:
   default:

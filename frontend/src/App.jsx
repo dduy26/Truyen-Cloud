@@ -1799,24 +1799,11 @@ export default function App() {
             </div>
 
             {/* SECTION 1: ĐỀ CỬ HÔM NAY (DAILY SEEDED RANDOM SHOWCASE) */}
-            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 className="section-title">📌 ĐỀ CỬ HÔM NAY</h2>
+            <div className="recommendation-header">
+              <h2 className="recommendation-title">📌 ĐỀ CỬ HÔM NAY</h2>
               <button
                 type="button"
-                className="btn-secondary"
-                style={{
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  borderRadius: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: 'var(--bg-card)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--accent-pink)',
-                  cursor: 'pointer',
-                  fontWeight: 600
-                }}
+                className="btn-secondary random-recommend-btn"
                 onClick={randomizeRecommendations}
                 title="Tự động xoay xở hoặc bấm để đổi 2 truyện ngẫu nhiên"
               >

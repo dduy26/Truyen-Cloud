@@ -4,6 +4,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+ENV VITE_API_URL=/api/v1
 RUN npm run build
 
 # ----- BƯỚC 2: Phục vụ bằng Nginx -----

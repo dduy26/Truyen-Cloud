@@ -1824,51 +1824,40 @@ export default function App() {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '32px' }}>
+            <div className="today-recommendation-grid">
               {getTodayRecommendations().map((s, idx) => {
                 if (!s) return null;
                 return (
                   <div
                     key={s.id || s.slug || idx}
-                    style={{
-                      background: 'var(--bg-card)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      display: 'flex',
-                      gap: '18px',
-                      cursor: 'pointer',
-                      boxShadow: 'var(--shadow-sm)',
-                      transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                    }}
+                    className="today-recommendation-card"
                     onClick={() => navigate(`/story/${s.slug}`)}
                   >
                     <img
                       src={sanitizeThumbUrl(s.thumbUrl)}
                       alt={s.name || 'Manga'}
-                      style={{ width: '120px', height: '160px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }}
+                      className="today-recommendation-img"
                       onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                     />
-                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
+                    <div className="today-recommendation-body">
                       <div>
-                        <div style={{ fontSize: '11px', color: 'var(--accent-pink)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                        <div className="today-recommendation-category">
                           {Array.isArray(s.categories) ? s.categories.join(' • ') : 'HOT SHOWCASE'}
                         </div>
-                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px', lineHeight: 1.3 }}>
+                        <h3 className="today-recommendation-title">
                           {s.name}
                         </h3>
-                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        <p className="today-recommendation-summary">
                           {s.summary || 'Bộ truyện tranh hấp dẫn với nhiều tình tiết kịch tính được cập nhật liên tục.'}
                         </p>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px' }}>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      <div className="today-recommendation-footer">
+                        <div className="today-recommendation-meta">
                           👤 <strong>{s.author || 'Maslow'}</strong> | 👁️ {(((s.viewCount || 100000)) / 1000).toFixed(0)}k
                         </div>
                         <button
-                          className="btn-primary"
-                          style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '20px' }}
+                          className="btn-primary today-recommendation-btn"
                           onClick={(e) => { e.stopPropagation(); navigate(`/read/${s.slug}/1`); }}
                         >
                           📖 Đọc ngay

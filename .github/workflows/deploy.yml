@@ -53,7 +53,7 @@ jobs:
             docker compose up -d --build
 
             # Clean up unused Docker images to save disk space on VPS
-            echo "🧹 Pruning unused Docker images..."
+            echo "Pruning unused Docker images..."
             docker image prune -f
 
             echo "=========================================="

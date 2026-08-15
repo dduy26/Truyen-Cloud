@@ -2098,3 +2098,147 @@ select option:checked {
   background-color: var(--accent-pink) !important;
   color: #ffffff !important;
 }
+
+/* ==========================================
+   TODAY RECOMMENDATIONS SECTION STYLES
+   ========================================== */
+.today-recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.today-recommendation-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  gap: 18px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.today-recommendation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.today-recommendation-img {
+  width: 120px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.today-recommendation-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+}
+
+.today-recommendation-category {
+  font-size: 11px;
+  color: var(--accent-pink);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-recommendation-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.today-recommendation-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.today-recommendation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.today-recommendation-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.today-recommendation-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Mobile Responsiveness for Recommendations */
+@media (max-width: 768px) {
+  .today-recommendation-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .today-recommendation-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .today-recommendation-img {
+    width: 95px;
+    height: 130px;
+  }
+
+  .today-recommendation-title {
+    font-size: 14px;
+  }
+
+  .today-recommendation-summary {
+    -webkit-line-clamp: 2;
+    font-size: 11px;
+  }
+
+  .today-recommendation-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .today-recommendation-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+}

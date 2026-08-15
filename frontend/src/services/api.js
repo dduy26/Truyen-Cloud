@@ -1,6 +1,6 @@
 // Frontend API Service Layer for MangaCloud Backend
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 /**
  * Generic fetch wrapper with automatic JWT header injection, credentials: 'include', and automatic 401 token refresh.

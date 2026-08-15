@@ -1,0 +1,61 @@
+name: Deploy to Production (Google Cloud VPS)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy MangaCloud App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=========================================="
+            echo "Starting Automated Deployment on VPS..."
+            echo "=========================================="
+
+            # Locate project directory
+            if [ -d "$HOME/Truyen-Cloud" ]; then
+              cd "$HOME/Truyen-Cloud"
+            elif [ -d "Truyen-Cloud" ]; then
+              cd "Truyen-Cloud"
+            elif [ -d "/var/www/Truyen-Cloud" ]; then
+              cd "/var/www/Truyen-Cloud"
+            else
+              echo "Current Directory: $(pwd)"
+            fi
+
+            echo "Working directory: $(pwd)"
+
+            # Pull latest changes from git
+            echo "Pulling latest code from main branch..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Write BACKEND_ENV secret to backend/.env if present
+            if [ -n "${{ secrets.BACKEND_ENV }}" ]; then
+              echo "Writing backend/.env from GitHub Secrets..."
+              echo "${{ secrets.BACKEND_ENV }}" > backend/.env
+            fi
+
+            # Rebuild and start Docker containers
+            echo "Building and starting Docker containers..."
+            docker compose up -d --build
+
+            # Clean up unused Docker images to save disk space on VPS
+            echo "🧹 Pruning unused Docker images..."
+            docker image prune -f
+
+            echo "=========================================="
+            echo "Deployment Finished Successfully!"
+            echo "=========================================="

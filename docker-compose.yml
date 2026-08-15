@@ -40,6 +40,8 @@ services:
     container_name: truyencloud-frontend
     ports:
       - "5173:5173"
+    environment:
+      - VITE_BACKEND_TARGET=http://backend:8080
     develop:
       watch:
         # Hot-reload React components and assets

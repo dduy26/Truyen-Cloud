@@ -64,6 +64,40 @@ export default function AdminDashboard({
   const [otruyenSlugInput, setOtruyenSlugInput] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, percent: 0, text: '' });
+  const [crawlerLogs, setCrawlerLogs] = useState([]);
+  const [isSyncingLatest, setIsSyncingLatest] = useState(false);
+
+  const fetchCrawlerLogs = async () => {
+    try {
+      const logs = await api.getCrawlerLogs();
+      setCrawlerLogs(Array.isArray(logs) ? logs : []);
+    } catch (e) {
+      setCrawlerLogs([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchCrawlerLogs();
+  }, []);
+
+  const handleManualTriggerSync = async () => {
+    setIsSyncingLatest(true);
+    showToast('⚡ Đã kích hoạt tác vụ cào ngầm! Đang quét Otruyen API...');
+    try {
+      const res = await api.syncLatestChapters();
+      if (res && res.success) {
+        showToast(`✅ ${res.message}`);
+        if (onRefreshStories) onRefreshStories();
+        fetchCrawlerLogs();
+      } else {
+        showToast(res?.message || 'Có lỗi xảy ra khi đồng bộ!', 'error');
+      }
+    } catch (err) {
+      showToast('Lỗi khi kích hoạt cào ngầm!', 'error');
+    } finally {
+      setIsSyncingLatest(false);
+    }
+  };
 
   // 1-Click Multi-Source Auto-Crawler State
   const [crawlerSourceTab, setCrawlerSourceTab] = useState('otruyen'); // 'otruyen' | 'mangadex'
@@ -1764,6 +1798,71 @@ export default function AdminDashboard({
             <div className="admin-modal-header" style={{ marginBottom: '16px' }}>
               <h3>Đồng Bộ Dữ Liệu Từ Server Nguồn API</h3>
               <button className="close-btn" onClick={() => !isImporting && setShowOtruyenModal(false)}>✕</button>
+            </div>
+
+            {/* AUTO-CRAWLER SCHEDULER CONTROL & LOGS WIDGET */}
+            <div style={{ backgroundColor: 'rgba(236, 72, 153, 0.06)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid var(--accent-pink)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🤖</span> Auto-Crawler Pipeline: <span style={{ color: '#10b981', fontWeight: 900 }}>ĐANG BẬT (15 phút/lần)</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Cơ chế Differential Sync (Tránh 429) & Tự động xóa Redis Cache khi có chap mới.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ backgroundColor: '#22c55e', padding: '8px 16px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  onClick={handleManualTriggerSync}
+                  disabled={isSyncingLatest || isImporting}
+                >
+                  {isSyncingLatest ? '⚡ Đang quét Otruyen...' : '⚡ Kích Hoạt Cào Ngay'}
+                </button>
+              </div>
+
+              {/* Crawler Logs List */}
+              {crawlerLogs.length > 0 && (
+                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>📜 Lịch Sử Cào Gần Nhất ({crawlerLogs.length}):</span>
+                    <span style={{ cursor: 'pointer', color: 'var(--accent-pink)' }} onClick={fetchCrawlerLogs}>🔄 Làm mới</span>
+                  </div>
+                  <div style={{ maxHeight: '140px', overflowY: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--bg-body)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+                          <th style={{ padding: '6px 10px' }}>Thời gian</th>
+                          <th style={{ padding: '6px 10px' }}>Loại</th>
+                          <th style={{ padding: '6px 10px' }}>Kết quả / Nội dung</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'right' }}>Thời gian</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {crawlerLogs.slice(0, 10).map((logItem, idx) => (
+                          <tr key={logItem.id || idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                              {logItem.createdAt ? new Date(logItem.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Gần đây'}
+                            </td>
+                            <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', fontWeight: 700 }}>
+                              <span style={{ padding: '2px 6px', borderRadius: '6px', fontSize: '10px', backgroundColor: logItem.type === 'MANUAL_TRIGGER' ? 'rgba(236,72,153,0.15)' : 'rgba(59,130,246,0.15)', color: logItem.type === 'MANUAL_TRIGGER' ? '#ec4899' : '#2563eb' }}>
+                                {logItem.type === 'MANUAL_TRIGGER' ? 'Thủ công' : 'Tự động 15p'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 10px', color: 'var(--text-primary)' }}>
+                              {logItem.message}
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                              {logItem.executionTimeMs ? `${logItem.executionTimeMs}ms` : '0ms'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Source Tab Switcher */}

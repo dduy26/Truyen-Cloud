@@ -173,8 +173,7 @@ export const api = {
     method: 'DELETE',
   }),
 
-  // Otruyen Auto Importer API
-  // Auto-Crawler 1-Click Search & Import APIs
+  // Otruyen Auto Importer & Crawler APIs
   searchOtruyenStories: (query) => request(`/admin/import-otruyen/search?q=${encodeURIComponent(query)}`).catch(() => []),
   importOtruyenBySlug: (slug) => request(`/admin/import-otruyen/${slug}`, { method: 'POST' }),
   searchMangadexStories: (query) => request(`/admin/import-otruyen/mangadex/search?q=${encodeURIComponent(query)}`).catch(() => []),
@@ -183,6 +182,9 @@ export const api = {
   importBatchOtruyenStories: (startPage = 1, endPage = 5) => request(`/admin/import-otruyen/batch?startPage=${startPage}&endPage=${endPage}`, {
     method: 'POST',
   }),
+
+  syncLatestChapters: () => request('/admin/import-otruyen/sync-latest', { method: 'POST' }),
+  getCrawlerLogs: () => request('/admin/import-otruyen/crawler-logs').catch(() => []),
 
   // Chapter Management APIs
   getChaptersByStory: (storySlug) => request(`/chapters/story/${storySlug}`).catch(() => []),

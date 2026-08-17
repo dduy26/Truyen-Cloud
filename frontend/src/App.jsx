@@ -2953,59 +2953,35 @@ export default function App() {
         )}
 
         {routePath.startsWith('/story/') && selectedStory && (
-          <div style={{ maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
+          <div className="story-detail-container">
             {/* 1. BREADCRUMB NAVIGATION */}
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ cursor: 'pointer', color: 'var(--text-color)' }} onClick={() => navigate('/')}>Trang Chủ</span>
               <span>/</span>
               <span style={{ color: 'var(--accent-pink)', fontWeight: 600 }}>{selectedStory.name}</span>
             </div>
 
-            {/* 2. TOP HERO CARD (2 COLUMNS) */}
-            <div style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '20px',
-              padding: '28px',
-              display: 'grid',
-              gridTemplateColumns: '220px 1fr',
-              gap: '28px',
-              boxShadow: 'var(--shadow-md)',
-              marginBottom: '28px'
-            }}>
+            {/* 2. TOP HERO CARD (2 COLUMNS RESPONSIVE) */}
+            <div className="story-detail-hero-card">
               {/* Left Poster Cover Column */}
-              <div>
+              <div className="story-detail-poster-col">
                 <img
                   src={sanitizeThumbUrl(selectedStory.thumbUrl)}
                   alt={selectedStory.name}
-                  style={{
-                    width: '220px',
-                    height: '310px',
-                    objectFit: 'cover',
-                    borderRadius: '14px',
-                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
-                    border: '1px solid var(--border-color)'
-                  }}
+                  className="story-detail-poster-img"
                   onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                 />
               </div>
 
               {/* Right Details Column */}
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
                 <div>
-                  <h1 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '16px', lineHeight: 1.2 }}>
+                  <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '16px', lineHeight: 1.2 }}>
                     {selectedStory.name}
                   </h1>
 
-                  {/* Metadata Grid (2 Columns) */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px 24px',
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                    marginBottom: '18px'
-                  }}>
+                  {/* Metadata Grid (Responsive 2 to 1 Column) */}
+                  <div className="story-detail-meta-grid">
                     <div>📌 <strong>Tên khác:</strong> {Array.isArray(selectedStory.originName) ? selectedStory.originName.join('; ') : (typeof selectedStory.originName === 'string' ? selectedStory.originName : selectedStory.name)}</div>
                     <div>👤 <strong>Tác giả:</strong> <span style={{ color: 'var(--accent-pink)', fontWeight: 600 }}>{selectedStory.author && selectedStory.author !== 'MangaCloud' ? selectedStory.author : 'Đang cập nhật'}</span></div>
                     <div>📅 <strong>Ngày tạo:</strong> {selectedStory.createdAt ? new Date(selectedStory.createdAt).toLocaleDateString('vi-VN') : '12/08/2021'}</div>
@@ -3040,8 +3016,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Action Buttons Row */}
-                <div style={{ display: 'flex', gap: '12px' }}>
+                {/* Action Buttons Row (Responsive Stack on Mobile) */}
+                <div className="story-detail-action-buttons">
                   <button
                     type="button"
                     className="btn-primary"

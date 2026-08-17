@@ -2347,4 +2347,205 @@ select option:checked {
     font-size: 14px;
   }
 }
+
+/* ==========================================
+   GLOBAL MOBILE OVERFLOW FIXES & RESPONSIVENESS
+   ========================================== */
+
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  width: 100% !important;
+}
+
+#root, .app-container {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  width: 100% !important;
+}
+
+.main-container {
+  max-width: 1280px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* Today Recommendations Mobile Fixes */
+.today-recommendation-card {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+@media (max-width: 580px) {
+  .today-recommendation-card {
+    flex-direction: row;
+    padding: 12px;
+    gap: 12px;
+  }
+  .today-recommendation-img {
+    width: 85px;
+    height: 120px;
+  }
+  .today-recommendation-title {
+    font-size: 13px;
+    margin-bottom: 4px;
+    -webkit-line-clamp: 2;
+  }
+  .today-recommendation-summary {
+    display: none;
+  }
+  .today-recommendation-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .today-recommendation-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
+
+/* Story Detail Page Responsive Hero Card */
+.story-detail-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.story-detail-hero-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 28px;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 28px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.story-detail-poster-img {
+  width: 220px;
+  height: 310px;
+  object-fit: cover;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-color);
+}
+
+.story-detail-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.story-detail-action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .story-detail-hero-card {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 16px;
+    border-radius: 16px;
+    text-align: center;
+  }
+  .story-detail-poster-col {
+    display: flex;
+    justify-content: center;
+  }
+  .story-detail-poster-img {
+    width: 160px;
+    height: 225px;
+    margin: 0 auto;
+  }
+  .story-detail-meta-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    text-align: left;
+    font-size: 12px;
+  }
+  .story-detail-meta-grid > div {
+    grid-column: span 1 !important;
+  }
+  .story-detail-action-buttons {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+  .story-detail-action-buttons button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Chapter Reader Top Bar Mobile Fixes */
+.reader-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+  box-sizing: border-box;
+  max-width: 100vw;
+}
+
+@media (max-width: 768px) {
+  .reader-top-bar {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .reader-bar-left {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .reader-story-title {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+  .reader-bar-right {
+    width: 100%;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .chapter-select-dropdown {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+  .reader-bar-right button {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+}
+
 

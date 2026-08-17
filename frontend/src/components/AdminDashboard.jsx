@@ -1861,6 +1861,69 @@ export default function AdminDashboard({
                       </tbody>
                     </table>
                   </div>
+
+                  {/* RECENTLY AUTO-UPDATED STORIES INSPECTOR CARDS */}
+                  {(() => {
+                    const allUpdatedDetails = crawlerLogs
+                      .filter(l => Array.isArray(l.updatedStoryDetails) && l.updatedStoryDetails.length > 0)
+                      .flatMap(l => l.updatedStoryDetails);
+
+                    if (allUpdatedDetails.length === 0) return null;
+
+                    // Remove duplicates by slug
+                    const seen = new Set();
+                    const uniqueUpdated = allUpdatedDetails.filter(item => {
+                      if (!item.slug || seen.has(item.slug)) return false;
+                      seen.add(item.slug);
+                      return true;
+                    }).slice(0, 6);
+
+                    return (
+                      <div style={{ marginTop: '14px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>🔥</span> Truyện Vừa Tự Động Cập Nhật Chap Mới (Bấm để kiểm tra):
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px' }}>
+                          {uniqueUpdated.map((item) => {
+                            const matchedStory = safeStories.find(s => s.slug === item.slug) || { slug: item.slug, name: item.name, thumbUrl: item.thumbUrl, latestChapter: item.latestChapter };
+                            return (
+                              <div
+                                key={item.slug}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  backgroundColor: 'var(--bg-card)',
+                                  border: '1px solid var(--border-color)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onClick={() => openChapterModal(matchedStory)}
+                                title="Bấm để kiểm tra danh sách Chapter"
+                              >
+                                <img
+                                  src={item.thumbUrl || DEFAULT_COVER_IMAGE}
+                                  alt={item.name}
+                                  style={{ width: '32px', height: '44px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--accent-pink)', flexShrink: 0 }}
+                                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
+                                />
+                                <div style={{ overflow: 'hidden', flex: 1 }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {item.name}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: 'var(--accent-pink)', fontWeight: 800, marginTop: '2px' }}>
+                                    {item.latestChapter || 'Mới ra'}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

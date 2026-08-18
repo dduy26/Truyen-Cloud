@@ -28,7 +28,16 @@ export default function App() {
   const [bookmarkedStories, setBookmarkedStories] = useState(() => {
     try {
       const saved = localStorage.getItem('mangacloud_bookmarks_list');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+      const seen = new Set();
+      return parsed.filter(s => {
+        const key = String(s.slug || s.id || '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     } catch (e) {
       return [];
     }
@@ -186,16 +195,13 @@ export default function App() {
     }
     if (typeof input === 'string') {
       const str = input.trim();
-      // First: try regex to extract date parts (handles LocalDateTime without timezone as LOCAL time)
       const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
       if (match) {
         const [, y, m, d, h, min, s] = match;
-        // If string has timezone info (Z or +offset), let native parser handle it correctly
         if (str.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(str)) {
           const parsed = new Date(str);
           if (!isNaN(parsed.getTime())) return parsed;
         }
-        // No timezone info (e.g. "2026-08-12T12:43:00") → treat as local time
         return new Date(
           parseInt(y, 10),
           parseInt(m, 10) - 1,
@@ -285,7 +291,7 @@ export default function App() {
     return 'Vừa xong';
   };
 
-  // Toggle Bookmark Handler with localStorage persistence & full story object caching
+  // Toggle Bookmark Handler with canonical key tracking (1 story = 1 bookmark count)
   const toggleBookmark = (storyOrId, storyName, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
@@ -294,9 +300,9 @@ export default function App() {
 
     if (typeof storyOrId === 'object' && storyOrId !== null) {
       storyObj = storyOrId;
-      targetKey = storyObj.id || storyObj.slug;
+      targetKey = storyObj.slug || storyObj.id;
     } else {
-      targetKey = storyOrId || selectedStory?.id || selectedStory?.slug;
+      targetKey = storyOrId || selectedStory?.slug || selectedStory?.id;
       storyObj = (selectedStory && (selectedStory.id === targetKey || selectedStory.slug === targetKey))
         ? selectedStory
         : (Array.isArray(stories) ? stories.find(s => String(s.id) === String(targetKey) || String(s.slug) === String(targetKey)) : null)
@@ -304,35 +310,45 @@ export default function App() {
     }
 
     if (!targetKey) return;
-    const keyStr = String(targetKey);
+    const canonicalKey = String(storyObj.slug || storyObj.id || targetKey);
+    const idKey = storyObj.id ? String(storyObj.id) : null;
+    const slugKey = storyObj.slug ? String(storyObj.slug) : null;
     const nameStr = storyObj.name || storyName || 'Truyện';
 
     setBookmarkedIds(prev => {
       const nextIds = new Set(prev);
-      const isAlready = nextIds.has(keyStr) || (storyObj.slug && nextIds.has(String(storyObj.slug))) || (storyObj.id && nextIds.has(String(storyObj.id)));
+      const isAlready = nextIds.has(canonicalKey) || (slugKey && nextIds.has(slugKey)) || (idKey && nextIds.has(idKey));
 
       let nextList = [];
       if (isAlready) {
-        if (storyObj.id) nextIds.delete(String(storyObj.id));
-        if (storyObj.slug) nextIds.delete(String(storyObj.slug));
-        nextIds.delete(keyStr);
+        nextIds.delete(canonicalKey);
+        if (idKey) nextIds.delete(idKey);
+        if (slugKey) nextIds.delete(slugKey);
 
-        nextList = bookmarkedStories.filter(s => String(s.id) !== keyStr && String(s.slug) !== keyStr);
+        nextList = bookmarkedStories.filter(s =>
+          String(s.slug || s.id) !== canonicalKey &&
+          (idKey ? String(s.id) !== idKey : true) &&
+          (slugKey ? String(s.slug) !== slugStr : true)
+        );
         showToast(`Đã bỏ theo dõi: ${nameStr}`);
       } else {
-        if (storyObj.id) nextIds.add(String(storyObj.id));
-        if (storyObj.slug) nextIds.add(String(storyObj.slug));
-        nextIds.add(keyStr);
+        nextIds.add(canonicalKey);
+        if (slugKey) nextIds.add(slugKey);
+        if (idKey) nextIds.add(idKey);
 
         const newEntry = {
-          id: storyObj.id || keyStr,
-          slug: storyObj.slug || keyStr,
+          id: storyObj.id || canonicalKey,
+          slug: storyObj.slug || canonicalKey,
           name: nameStr,
           thumbUrl: storyObj.thumbUrl || DEFAULT_COVER_IMAGE,
           latestChapter: storyObj.latestChapter || 'Ch. 1',
           author: storyObj.author || 'MangaCloud'
         };
-        nextList = [newEntry, ...bookmarkedStories.filter(s => String(s.id) !== keyStr && String(s.slug) !== keyStr)];
+        nextList = [newEntry, ...bookmarkedStories.filter(s =>
+          String(s.slug || s.id) !== canonicalKey &&
+          (idKey ? String(s.id) !== idKey : true) &&
+          (slugKey ? String(s.slug) !== slugKey : true)
+        )];
         showToast(`❤️ Đã lưu "${nameStr}" vào Theo Dõi!`);
       }
 
@@ -350,7 +366,9 @@ export default function App() {
     if (!story) return false;
     const idKey = story.id ? String(story.id) : null;
     const slugKey = story.slug ? String(story.slug) : null;
-    return Boolean((idKey && bookmarkedIds.has(idKey)) || (slugKey && bookmarkedIds.has(slugKey)));
+    if (slugKey && bookmarkedIds.has(slugKey)) return true;
+    if (idKey && bookmarkedIds.has(idKey)) return true;
+    return bookmarkedStories.some(s => (slugKey && String(s.slug) === slugKey) || (idKey && String(s.id) === idKey));
   };
 
   // Check persistent token & user session on app launch
@@ -1584,7 +1602,7 @@ export default function App() {
                           navigate('/profile');
                         }}
                       >
-                        ❤️ Truyện Theo Dõi ({bookmarkedIds.size})
+                        ❤️ Truyện Theo Dõi ({bookmarkedStories.length})
                       </button>
 
                       <button

@@ -1805,7 +1805,7 @@ export default function AdminDashboard({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🤖</span> Auto-Crawler Pipeline: <span style={{ color: '#10b981', fontWeight: 900 }}>ĐANG BẬT (15 phút/lần)</span>
+                    <span>🤖</span> Auto-Crawler Pipeline: <span style={{ color: '#10b981', fontWeight: 900 }}>ĐANG BẬT (5 phút/lần)</span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Cơ chế Differential Sync (Tránh 429) & Tự động xóa Redis Cache khi có chap mới.
@@ -1847,7 +1847,7 @@ export default function AdminDashboard({
                             </td>
                             <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', fontWeight: 700 }}>
                               <span style={{ padding: '2px 6px', borderRadius: '6px', fontSize: '10px', backgroundColor: logItem.type === 'MANUAL_TRIGGER' ? 'rgba(236,72,153,0.15)' : 'rgba(59,130,246,0.15)', color: logItem.type === 'MANUAL_TRIGGER' ? '#ec4899' : '#2563eb' }}>
-                                {logItem.type === 'MANUAL_TRIGGER' ? 'Thủ công' : 'Tự động 15p'}
+                                {logItem.type === 'MANUAL_TRIGGER' ? 'Thủ công' : 'Tự động 5p'}
                               </span>
                             </td>
                             <td style={{ padding: '6px 10px', color: 'var(--text-primary)' }}>

@@ -73,7 +73,7 @@ public class OtruyenImportController {
     public ResponseEntity<Map<String, Object>> syncLatestNewChapters() {
         Map<String, Object> response = new HashMap<>();
         try {
-            int updatedCount = otruyenImportService.syncLatestNewChapters();
+            int updatedCount = otruyenImportService.syncLatestNewChapters("MANUAL_TRIGGER");
             response.put("success", true);
             response.put("message", "⚡ Đã đồng bộ xong! Có " + updatedCount + " bộ truyện vừa được cập nhật chap mới nhất từ Otruyen.");
             response.put("updatedCount", updatedCount);
@@ -82,6 +82,15 @@ public class OtruyenImportController {
             response.put("success", false);
             response.put("message", "Lỗi khi đồng bộ chap mới: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @GetMapping("/crawler-logs")
+    public ResponseEntity<List<truyen.cloud.model.CrawlerLog>> getCrawlerLogs() {
+        try {
+            return ResponseEntity.ok(otruyenImportService.getRecentCrawlerLogs());
+        } catch (Exception e) {
+            return ResponseEntity.ok(java.util.Collections.emptyList());
         }
     }
 

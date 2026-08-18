@@ -10,18 +10,16 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @Slf4j
 public class StorySyncScheduler {
-
     private final OtruyenImportService otruyenImportService;
 
-    // Tự động kiểm tra & đồng bộ chapter mới từ Otruyen mỗi 15 phút (900,000 ms)
-    @Scheduled(fixedRate = 900000, initialDelay = 15000)
+    @Scheduled(cron = "${app.scheduler.cron:0 */5 * * * *}", zone = "Asia/Ho_Chi_Minh")
     public void autoSyncOtruyenNewChapters() {
-        log.info("⏰ [Scheduler Task] Đang tự động kiểm tra chap mới nhất trên Otruyen...");
+        log.info("[Scheduler Task - 5 phút/lần] Đang tự động quét kiểm tra chap mới trên Otruyen...");
         try {
-            int synced = otruyenImportService.syncLatestNewChapters();
-            log.info("✅ [Scheduler Task] Đã hoàn tất tự động kiểm tra! Tổng số bộ truyện được cập nhật chap mới: {}", synced);
+            int synced = otruyenImportService.syncLatestNewChapters("AUTO_SCHEDULED");
+            log.info("[Scheduler Task] Đã hoàn tất tự động kiểm tra! Tổng số bộ truyện được cập nhật chap mới: {}", synced);
         } catch (Exception e) {
-            log.error("❌ [Scheduler Task] Lỗi khi tự động đồng bộ chap mới: {}", e.getMessage());
+            log.error("[Scheduler Task] Lỗi khi tự động đồng bộ chap mới: {}", e.getMessage());
         }
     }
 }

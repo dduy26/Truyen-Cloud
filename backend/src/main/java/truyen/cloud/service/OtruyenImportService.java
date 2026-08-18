@@ -11,5 +11,7 @@ public interface OtruyenImportService {
     void importBatchStoriesAsync(int pages);
     void importBatchStoriesAsync(int startPage, int endPage);
     int syncLatestNewChapters();
+    int syncLatestNewChapters(String triggerType);
+    List<truyen.cloud.model.CrawlerLog> getRecentCrawlerLogs();
     String formatThumbUrl(String thumbFile);
 }

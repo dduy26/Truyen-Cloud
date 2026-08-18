@@ -3,8 +3,10 @@ package truyen.cloud.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import truyen.cloud.model.Chapter;
+import truyen.cloud.model.CrawlerLog;
 import truyen.cloud.model.Story;
 import truyen.cloud.repository.ChapterRepository;
+import truyen.cloud.repository.CrawlerLogRepository;
 import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.OtruyenImportService;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import java.util.*;
 public class OtruyenImportServiceImpl implements OtruyenImportService{
     private final StoryRepository storyRepository;
     private final ChapterRepository chapterRepository;
+    private final CrawlerLogRepository crawlerLogRepository;
     private final CacheManager cacheManager;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -223,55 +226,128 @@ public class OtruyenImportServiceImpl implements OtruyenImportService{
         }
     }
 
+    private double parseChapterNumber(String str) {
+        if (str == null || str.trim().isEmpty()) return 0.0;
+        try {
+            String cleaned = str.replaceAll("[^0-9.]", "");
+            if (cleaned.isEmpty()) return 0.0;
+            return Double.parseDouble(cleaned);
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
     @Override
     public int syncLatestNewChapters() {
+        return syncLatestNewChapters("AUTO_SCHEDULED");
+    }
+
+    @Override
+    public int syncLatestNewChapters(String triggerType) {
         int updatedCount = 0;
+        long startTime = System.currentTimeMillis();
+        String status = "SUCCESS";
+        String logMsg = "";
+        List<CrawlerLog.UpdatedStoryDetail> updatedStoryDetailsList = new ArrayList<>();
+        Set<String> processedSlugs = new HashSet<>();
+
         try {
-            String catalogUrl = otruyenApiBaseUrl + "danh-sach/truyen-moi?page=1";
-            String catalogJson = fetchJson(catalogUrl);
-            if (catalogJson != null) {
-                JsonNode root = objectMapper.readTree(catalogJson);
-                JsonNode items = root.path("data").path("items");
-                if (items.isArray()) {
-                    for (JsonNode item : items) {
-                        String slug = item.path("slug").asText();
-                        if (slug.isEmpty()) continue;
+            // 1. Check pages 1 to 5 (~120 latest stories from Otruyen API)
+            for (int page = 1; page <= 5; page++) {
+                String catalogUrl = otruyenApiBaseUrl + "danh-sach/truyen-moi?page=" + page;
+                String catalogJson = fetchJson(catalogUrl);
+                if (catalogJson != null) {
+                    JsonNode root = objectMapper.readTree(catalogJson);
+                    JsonNode items = root.path("data").path("items");
+                    if (items.isArray()) {
+                        for (JsonNode item : items) {
+                            String slug = item.path("slug").asText();
+                            if (slug.isEmpty() || processedSlugs.contains(slug)) continue;
+                            processedSlugs.add(slug);
 
-                        JsonNode chaptersLatestNode = item.path("chaptersLatest");
-                        String otruyenLatestCh = "1";
-                        if (chaptersLatestNode.isArray() && chaptersLatestNode.size() > 0) {
-                            otruyenLatestCh = chaptersLatestNode.get(0).path("chapter_name").asText("1");
-                        }
-
-                        Optional<Story> storyOpt = storyRepository.findBySlug(slug);
-                        boolean isNewOrOutdated = false;
-
-                        if (storyOpt.isEmpty()) {
-                            isNewOrOutdated = true;
-                        } else {
-                            Story existing = storyOpt.get();
-                            String localLatest = existing.getLatestChapter() != null ? existing.getLatestChapter().replace("Ch. ", "").trim() : "0";
-                            if (!otruyenLatestCh.equals(localLatest)) {
-                                isNewOrOutdated = true;
+                            JsonNode chaptersLatestNode = item.path("chaptersLatest");
+                            String otruyenLatestChStr = "1";
+                            if (chaptersLatestNode.isArray() && chaptersLatestNode.size() > 0) {
+                                otruyenLatestChStr = chaptersLatestNode.get(0).path("chapter_name").asText("1");
                             }
-                        }
 
-                        if (isNewOrOutdated) {
-                            try {
-                                importStoryInternal(slug);
-                                updatedCount++;
-                                System.out.println("🔄 [Auto-Sync OTruyen] Đã tự động cập nhật chap mới cho bộ: " + slug + " (Ch. " + otruyenLatestCh + ")");
-                            } catch (Exception e) {
-                                System.err.println("Lỗi auto-sync story " + slug + ": " + e.getMessage());
+                            double otruyenChNum = parseChapterNumber(otruyenLatestChStr);
+
+                            Optional<Story> storyOpt = storyRepository.findBySlug(slug);
+                            boolean isNewOrOutdated = false;
+
+                            if (storyOpt.isEmpty()) {
+                                // Story is brand new to local DB
+                                isNewOrOutdated = true;
+                            } else {
+                                Story existing = storyOpt.get();
+                                double localChNum = parseChapterNumber(existing.getLatestChapter());
+                                if (otruyenChNum > localChNum || (localChNum == 0 && otruyenChNum > 0)) {
+                                    isNewOrOutdated = true;
+                                }
+                            }
+
+                            if (isNewOrOutdated) {
+                                try {
+                                    Story imported = importStoryInternal(slug);
+                                    if (imported != null) {
+                                        updatedCount++;
+                                        updatedStoryDetailsList.add(CrawlerLog.UpdatedStoryDetail.builder()
+                                                .slug(slug)
+                                                .name(imported.getName())
+                                                .latestChapter(imported.getLatestChapter())
+                                                .thumbUrl(imported.getThumbUrl())
+                                                .build());
+                                        System.out.println("🔄 [Auto-Sync OTruyen] Đã tự động cập nhật chap mới: " + slug + " (" + imported.getLatestChapter() + ")");
+                                    }
+                                    // Rate-limiting delay to prevent 429 Too Many Requests
+                                    Thread.sleep(300);
+                                } catch (Exception e) {
+                                    System.err.println("Lỗi auto-sync story " + slug + ": " + e.getMessage());
+                                }
                             }
                         }
                     }
                 }
             }
+
+            if (updatedCount > 0) {
+                clearAllStoryCaches();
+                logMsg = "⚡ Đã phát hiện và tự động đồng bộ " + updatedCount + " bộ truyện có chapter mới từ Otruyen API.";
+            } else {
+                logMsg = "✓ Đã kiểm tra 120 bộ truyện mới nhất: Tất cả đều đã được cập nhật bản mới nhất.";
+            }
         } catch (Exception e) {
+            status = "FAILED";
+            logMsg = "Lỗi khi chạy đồng bộ chap mới: " + e.getMessage();
             System.err.println("Lỗi chạy syncLatestNewChapters: " + e.getMessage());
+        } finally {
+            long executionTimeMs = System.currentTimeMillis() - startTime;
+            try {
+                CrawlerLog crawlerLog = CrawlerLog.builder()
+                        .type(triggerType != null ? triggerType : "AUTO_SCHEDULED")
+                        .status(status)
+                        .message(logMsg)
+                        .updatedStoriesCount(updatedCount)
+                        .updatedStoryDetails(updatedStoryDetailsList)
+                        .executionTimeMs(executionTimeMs)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+                crawlerLogRepository.save(crawlerLog);
+            } catch (Exception e) {
+                System.err.println("Không thể lưu CrawlerLog: " + e.getMessage());
+            }
         }
         return updatedCount;
+    }
+
+    @Override
+    public List<CrawlerLog> getRecentCrawlerLogs() {
+        try {
+            return crawlerLogRepository.findTop20ByOrderByCreatedAtDesc();
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
     private Story importStoryInternal(String slug) throws Exception {

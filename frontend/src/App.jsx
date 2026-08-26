@@ -3,11 +3,64 @@ import api from './services/api';
 import AdminDashboard from './components/AdminDashboard';
 import './index.css';
 
-const DEFAULT_COVER_IMAGE = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80';
-const DEFAULT_WEBTOON_PAGE = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1200&auto=format&fit=crop&q=95';
+const createCoverSvg = (bg1, bg2, label) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600">
+    <defs>
+      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${bg1}" />
+        <stop offset="100%" stop-color="${bg2}" />
+      </linearGradient>
+    </defs>
+    <rect width="400" height="600" rx="16" fill="url(#g)" />
+    <circle cx="200" cy="220" r="80" fill="rgba(255,255,255,0.12)" />
+    <path d="M165 240 L235 240 L200 170 Z" fill="rgba(255,255,255,0.25)" />
+    <text x="50%" y="380" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="1">${label}</text>
+    <text x="50%" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="500" fill="rgba(255,255,255,0.75)" text-anchor="middle">TruyenCloud • Manga Reader</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+const createWebtoonPageSvg = (title = 'TRANG ẢNH ĐANG ĐƯỢC NẠP') => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+    <rect width="800" height="1200" fill="#0f172a" />
+    <circle cx="400" cy="500" r="80" fill="#1e293b" stroke="#334155" stroke-width="4" />
+    <path d="M365 520 L435 520 L400 450 Z" fill="#64748b" />
+    <text x="50%" y="650" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="700" fill="#f8fafc" text-anchor="middle">${title}</text>
+    <text x="50%" y="700" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" fill="#94a3b8" text-anchor="middle">Server đang đồng bộ dữ liệu ảnh từ nguồn MangaDex / OTruyen</text>
+    <text x="50%" y="740" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" fill="#64748b" text-anchor="middle">TruyenCloud Webtoon Reader</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+const DEFAULT_COVER_IMAGE = createCoverSvg('%236366f1', '%23a855f7', 'MANGA');
+const DEFAULT_WEBTOON_PAGE = createWebtoonPageSvg();
 const DEFAULT_USER_AVATAR = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><circle cx="100" cy="100" r="100" fill="%23cbd5e1"/><circle cx="100" cy="75" r="40" fill="%23ffffff"/><path d="M100 125c-42 0-75 22-75 48v20h150v-20c0-26-33-48-75-48z" fill="%23ffffff"/></svg>`;
 
-// Full categories list matching OTruyen manga genres
+const GRADIENT_PAIRS = [
+  ['%236366f1', '%23a855f7'],
+  ['%23ec4899', '%23f43f5e'],
+  ['%233b82f6', '%2306b6d4'],
+  ['%2310b981', '%23059669'],
+  ['%23f59e0b', '%23d97706'],
+  ['%238b5cf6', '%236d28d9'],
+  ['%23ef4444', '%23b91c1c'],
+  ['%2314b8a6', '%230d9488'],
+  ['%2364748b', '%23334155'],
+  ['%230284c7', '%230369a1']
+];
+
+export const getFallbackCoverForStory = (identifier = '') => {
+  const str = String(identifier || 'Manga');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const pair = GRADIENT_PAIRS[Math.abs(hash) % GRADIENT_PAIRS.length];
+  const shortTitle = str.length > 18 ? str.substring(0, 16) + '...' : (str || 'MANGA');
+  return createCoverSvg(pair[0], pair[1], shortTitle.toUpperCase());
+};
+
+// Full categories list matching CuuTruyen manga genres
 const CATEGORIES_LIST = [
   'Action', 'Adult', 'Adventure', 'Anime', 'Chuyển Sinh', 'Comedy', 'Comic',
   'Demons', 'Detective', 'Doujinshi', 'Drama', 'Ecchi', 'Fantasy', 'Gender Swapping',
@@ -139,17 +192,42 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const sanitizeThumbUrl = (url) => {
+  // Unwrap nested proxy URL — nếu URL đã chứa `/images/proxy?url=` của bất kỳ đường dẫn nào
+  // (cả của localhost và của cuutruyen.net nội bộ), decode ra URL gốc cuối cùng
+  const getCleanImageUrl = (rawUrl) => {
+    if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+    let decoded = rawUrl.trim();
+    let maxIterations = 5;
+    // Unwrap nếu URL chứa pattern proxy?url=
+    while (maxIterations-- > 0 && decoded.includes('/images/proxy?url=')) {
+      const idx = decoded.indexOf('/images/proxy?url=');
+      const inner = decoded.substring(idx + '/images/proxy?url='.length);
+      try {
+        decoded = decodeURIComponent(inner).trim();
+      } catch (e) {
+        break;
+      }
+    }
+    return decoded;
+  };
+
+  const sanitizeThumbUrl = (url, identifier = '') => {
     if (!url || typeof url !== 'string' || url.trim() === '' || url.startsWith('blob:')) {
-      return DEFAULT_COVER_IMAGE;
+      return getFallbackCoverForStory(identifier);
     }
     let res = url.trim();
-    // Normalize any otruyenapi domain variations to img.otruyenapi.com
-    res = res.replace(/https?:\/\/(img\.)*otruyenapi\.com/g, 'https://img.otruyenapi.com');
-    if (!res.startsWith('http://') && !res.startsWith('https://')) {
-      res = `https://img.otruyenapi.com/uploads/comics/${res.replace(/^\/+/, '')}`;
+    if (res.includes('unsplash.com') || res.startsWith('data:')) {
+      return res;
     }
-    return res;
+    // Unwrap nested proxy URL trước khi bọc thêm layer proxy
+    res = getCleanImageUrl(res);
+    if (res.includes('storage-ct.lrclib.net')) {
+      res = res.replace('storage-ct.lrclib.net', 'cuutruyen.net');
+    }
+    if (!res.startsWith('http://') && !res.startsWith('https://')) {
+      res = `https://cuutruyen.net/${res.replace(/^\/+/, '')}`;
+    }
+    return `/api/v1/images/proxy?url=${encodeURIComponent(res)}`;
   };
 
   const getStoryPosterUrl = (storySlug, fallbackUrl) => {
@@ -615,8 +693,8 @@ export default function App() {
       }
       const saved = localStorage.getItem('mangacloud_history');
       return saved ? JSON.parse(saved) : [
-        { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/solo-leveling-thumb.jpg', readAt: new Date(Date.now() - 3600000).toISOString() },
-        { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/one-piece-thumb.jpg', readAt: new Date(Date.now() - 86400000).toISOString() }
+        { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400', readAt: new Date(Date.now() - 3600000).toISOString() },
+        { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400', readAt: new Date(Date.now() - 86400000).toISOString() }
       ];
     } catch (e) { return []; }
   });
@@ -1839,10 +1917,10 @@ export default function App() {
                     onClick={() => navigate(`/story/${s.slug}`)}
                   >
                     <img
-                      src={sanitizeThumbUrl(s.thumbUrl)}
+                      src={sanitizeThumbUrl(s.thumbUrl, s.slug || s.name)}
                       alt={s.name || 'Manga'}
                       className="today-recommendation-img"
-                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
+                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getFallbackCoverForStory(s.slug || s.name); }}
                     />
                     <div className="today-recommendation-body">
                       <div>
@@ -1898,10 +1976,10 @@ export default function App() {
                       </button>
 
                       <img
-                        src={sanitizeThumbUrl(story.thumbUrl)}
+                        src={sanitizeThumbUrl(story.thumbUrl, story.slug || story.name)}
                         alt={story.name}
                         className="manga-cover-img"
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getFallbackCoverForStory(story.slug || story.name); }}
                       />
                     </div>
 
@@ -1943,10 +2021,10 @@ export default function App() {
                       </button>
 
                       <img
-                        src={sanitizeThumbUrl(story.thumbUrl)}
+                        src={sanitizeThumbUrl(story.thumbUrl, story.slug || story.name)}
                         alt={story.name}
                         className="manga-cover-img"
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getFallbackCoverForStory(story.slug || story.name); }}
                       />
                     </div>
 
@@ -1989,10 +2067,10 @@ export default function App() {
                       </button>
 
                       <img
-                        src={sanitizeThumbUrl(story.thumbUrl)}
+                        src={sanitizeThumbUrl(story.thumbUrl, story.slug || story.name)}
                         alt={story.name}
                         className="manga-cover-img"
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getFallbackCoverForStory(story.slug || story.name); }}
                       />
                     </div>
 
@@ -2033,10 +2111,10 @@ export default function App() {
                       </button>
 
                       <img
-                        src={sanitizeThumbUrl(story.thumbUrl)}
+                        src={sanitizeThumbUrl(story.thumbUrl, story.slug || story.name)}
                         alt={story.name}
                         className="manga-cover-img"
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getFallbackCoverForStory(story.slug || story.name); }}
                       />
                     </div>
 
@@ -3495,23 +3573,26 @@ export default function App() {
                     ? chapterDetail.imageUrls
                     : (chapterDetail?.pages && chapterDetail.pages.length > 0)
                       ? chapterDetail.pages
-                      : [
-                        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1000&auto=format&fit=crop&q=80'
-                      ];
+                      : [ DEFAULT_WEBTOON_PAGE ];
 
-                  return pagesList.map((imgUrl, idx) => (
-                    <img
-                      key={idx}
-                      src={imgUrl}
-                      alt={`Page ${idx + 1}`}
-                      className="webtoon-page-img"
-                      loading="lazy"
-                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_WEBTOON_PAGE; }}
-                    />
-                  ));
+                  return pagesList.map((imgUrl, idx) => {
+                    // Unwrap nested proxy URL trước khi bọc thêm layer proxy của mình
+                    const cleanUrl = getCleanImageUrl(imgUrl);
+                    const finalSrc = (cleanUrl && typeof cleanUrl === 'string' && cleanUrl.startsWith('http') && !cleanUrl.includes('unsplash.com'))
+                      ? `/api/v1/images/proxy?url=${encodeURIComponent(cleanUrl)}`
+                      : (cleanUrl || imgUrl);
+                    return (
+                      <img
+                        key={idx}
+                        src={finalSrc}
+                        alt={`Page ${idx + 1}`}
+                        className="webtoon-page-img"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_WEBTOON_PAGE; }}
+                      />
+                    );
+                  });
                 })()
               )}
             </main>

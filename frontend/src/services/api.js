@@ -173,18 +173,19 @@ export const api = {
     method: 'DELETE',
   }),
 
-  // Otruyen Auto Importer & Crawler APIs
-  searchOtruyenStories: (query) => request(`/admin/import-otruyen/search?q=${encodeURIComponent(query)}`).catch(() => []),
-  importOtruyenBySlug: (slug) => request(`/admin/import-otruyen/${slug}`, { method: 'POST' }),
-  searchMangadexStories: (query) => request(`/admin/import-otruyen/mangadex/search?q=${encodeURIComponent(query)}`).catch(() => []),
-  importMangadexById: (id) => request(`/admin/import-otruyen/mangadex/${id}`, { method: 'POST' }),
+  // CuuTruyen Auto Importer & Crawler APIs
+  searchCuutruyenStories: (query) => request(`/admin/import-cuutruyen/search?q=${encodeURIComponent(query)}`).catch(() => []),
+  importCuutruyenBySlug: (slug) => request(`/admin/import-cuutruyen/slug/${slug}`, { method: 'POST' }),
+  searchMangadexStories: (query) => request(`/admin/import-cuutruyen/mangadex/search?q=${encodeURIComponent(query)}`).catch(() => []),
+  importMangadexById: (id) => request(`/admin/import-cuutruyen/mangadex/${id}`, { method: 'POST' }),
 
-  importBatchOtruyenStories: (startPage = 1, endPage = 5) => request(`/admin/import-otruyen/batch?startPage=${startPage}&endPage=${endPage}`, {
+  importBatchCuutruyenStories: (startPage = 1, endPage = 5) => request(`/admin/import-cuutruyen/batch?startPage=${startPage}&endPage=${endPage}`, {
     method: 'POST',
   }),
 
-  syncLatestChapters: () => request('/admin/import-otruyen/sync-latest', { method: 'POST' }),
-  getCrawlerLogs: () => request('/admin/import-otruyen/crawler-logs').catch(() => []),
+  syncLatestChapters: () => request('/admin/import-cuutruyen/sync-latest', { method: 'POST' }),
+  migrateLegacyUrls: () => request('/admin/import-cuutruyen/migrate-legacy-urls', { method: 'POST' }),
+  getCrawlerLogs: () => request('/admin/import-cuutruyen/crawler-logs').catch(() => []),
 
   // Chapter Management APIs
   getChaptersByStory: (storySlug) => request(`/chapters/story/${storySlug}`).catch(() => []),

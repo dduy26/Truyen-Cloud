@@ -2,7 +2,7 @@ package truyen.cloud.controller;
 
 import truyen.cloud.model.Story;
 import truyen.cloud.service.MangadexImportService;
-import truyen.cloud.service.OtruyenImportService;
+import truyen.cloud.service.CuutruyenImportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,16 +12,16 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/admin/import-otruyen")
+@RequestMapping("/api/v1/admin/import-cuutruyen")
 @RequiredArgsConstructor
-public class OtruyenImportController {
+public class CuutruyenImportController {
 
-    private final OtruyenImportService otruyenImportService;
+    private final CuutruyenImportService cuutruyenImportService;
     private final MangadexImportService mangadexImportService;
 
     @GetMapping("/search")
-    public ResponseEntity<List<Map<String, Object>>> searchOtruyen(@RequestParam String q) {
-        return ResponseEntity.ok(otruyenImportService.searchOtruyenStories(q));
+    public ResponseEntity<List<Map<String, Object>>> searchCuutruyen(@RequestParam String q) {
+        return ResponseEntity.ok(cuutruyenImportService.searchCuutruyenStories(q));
     }
 
     @GetMapping("/mangadex/search")
@@ -61,11 +61,11 @@ public class OtruyenImportController {
         int from = (startPage != null && startPage > 0) ? startPage : 1;
         int to = (endPage != null && endPage >= from) ? endPage : (startPage != null ? startPage : pages);
 
-        otruyenImportService.importBatchStoriesAsync(from, to);
+        cuutruyenImportService.importBatchStoriesAsync(from, to);
 
-        int totalExpected = (to - from + 1) * 24;
+        int totalExpected = (to - from + 1) * 20;
         response.put("success", true);
-        response.put("message", "🚀 Đã khởi chạy cào ngầm từ Trang " + from + " đến Trang " + to + " (~" + totalExpected + " bộ truyện)! Truyện đang tự động nạp vào Database.");
+        response.put("message", "🚀 Đã khởi chạy cào ngầm từ Trang " + from + " đến Trang " + to + " (~" + totalExpected + " bộ truyện từ CuuTruyen)! Truyện đang tự động nạp vào Database.");
         return ResponseEntity.ok(response);
     }
 
@@ -73,14 +73,30 @@ public class OtruyenImportController {
     public ResponseEntity<Map<String, Object>> syncLatestNewChapters() {
         Map<String, Object> response = new HashMap<>();
         try {
-            int updatedCount = otruyenImportService.syncLatestNewChapters("MANUAL_TRIGGER");
+            int updatedCount = cuutruyenImportService.syncLatestNewChapters("MANUAL_TRIGGER");
             response.put("success", true);
-            response.put("message", "⚡ Đã đồng bộ xong! Có " + updatedCount + " bộ truyện vừa được cập nhật chap mới nhất từ Otruyen.");
+            response.put("message", "⚡ Đã đồng bộ xong! Có " + updatedCount + " bộ truyện vừa được cập nhật chap mới nhất từ CuuTruyen.");
             response.put("updatedCount", updatedCount);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Lỗi khi đồng bộ chap mới: " + e.getMessage());
+            response.put("message", "Lỗi khi đồng bộ chap mới từ CuuTruyen: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @PostMapping("/migrate-legacy-urls")
+    public ResponseEntity<Map<String, Object>> migrateLegacyUrls() {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            int count = cuutruyenImportService.migrateLegacyUrls();
+            response.put("success", true);
+            response.put("message", "⚡ Đã quét và cập nhật " + count + " bộ truyện có đường dẫn cũ sang CuuTruyen!");
+            response.put("updatedCount", count);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Lỗi khi chuyển đổi URL cũ: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -88,30 +104,35 @@ public class OtruyenImportController {
     @GetMapping("/crawler-logs")
     public ResponseEntity<List<truyen.cloud.model.CrawlerLog>> getCrawlerLogs() {
         try {
-            return ResponseEntity.ok(otruyenImportService.getRecentCrawlerLogs());
+            return ResponseEntity.ok(cuutruyenImportService.getRecentCrawlerLogs());
         } catch (Exception e) {
             return ResponseEntity.ok(java.util.Collections.emptyList());
         }
+    }
+
+    @PostMapping("/slug/{slug}")
+    public ResponseEntity<Map<String, Object>> importStoryBySlugPath(@PathVariable String slug) {
+        return importStoryBySlug(slug);
     }
 
     @PostMapping("/{slug}")
     public ResponseEntity<Map<String, Object>> importStoryBySlug(@PathVariable String slug) {
         Map<String, Object> response = new HashMap<>();
         try {
-            Story storyEntity = otruyenImportService.importStoryBySlug(slug);
+            Story storyEntity = cuutruyenImportService.importStoryBySlug(slug);
             if (storyEntity != null) {
                 response.put("success", true);
-                response.put("message", "Đã import bộ truyện \"" + storyEntity.getName() + "\" thành công!");
+                response.put("message", "Đã import bộ truyện CuuTruyen \"" + storyEntity.getName() + "\" thành công!");
                 response.put("story", storyEntity);
                 return ResponseEntity.ok(response);
             } else {
                 response.put("success", false);
-                response.put("message", "Không tìm thấy bộ truyện hoặc không thể lấy dữ liệu từ Otruyen API!");
+                response.put("message", "Không tìm thấy bộ truyện hoặc không thể lấy dữ liệu từ CuuTruyen API!");
                 return ResponseEntity.badRequest().body(response);
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Lỗi trong quá trình Import: " + e.getMessage());
+            response.put("message", "Lỗi trong quá trình Import CuuTruyen: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }

@@ -59,9 +59,9 @@ export default function AdminDashboard({
     }
   }, [safeStories, selectedStorySlug]);
 
-  // Otruyen Auto Importer & Live Progress State
-  const [showOtruyenModal, setShowOtruyenModal] = useState(false);
-  const [otruyenSlugInput, setOtruyenSlugInput] = useState('');
+  // CuuTruyen Auto Importer & Live Progress State
+  const [showCuutruyenModal, setShowCuutruyenModal] = useState(false);
+  const [cuutruyenSlugInput, setCuutruyenSlugInput] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, percent: 0, text: '' });
   const [crawlerLogs, setCrawlerLogs] = useState([]);
@@ -82,25 +82,24 @@ export default function AdminDashboard({
 
   const handleManualTriggerSync = async () => {
     setIsSyncingLatest(true);
-    showToast('⚡ Đã kích hoạt tác vụ cào ngầm! Đang quét Otruyen API...');
+    const sourceName = crawlerSourceTab === 'mangadex' ? 'MangaDex Global' : 'CuuTruyen API';
+    showToast(`⚡ Đã kích hoạt tác vụ cào ngầm! Đang quét ${sourceName}...`);
     try {
       const res = await api.syncLatestChapters();
       if (res && res.success) {
         showToast(`✅ ${res.message}`);
         if (onRefreshStories) onRefreshStories();
-        fetchCrawlerLogs();
-      } else {
-        showToast(res?.message || 'Có lỗi xảy ra khi đồng bộ!', 'error');
       }
-    } catch (err) {
-      showToast('Lỗi khi kích hoạt cào ngầm!', 'error');
+      await fetchCrawlerLogs();
+    } catch (e) {
+      showToast('Lỗi khi kích hoạt đồng bộ!', 'error');
     } finally {
       setIsSyncingLatest(false);
     }
   };
 
   // 1-Click Multi-Source Auto-Crawler State
-  const [crawlerSourceTab, setCrawlerSourceTab] = useState('otruyen'); // 'otruyen' | 'mangadex'
+  const [crawlerSourceTab, setCrawlerSourceTab] = useState('cuutruyen'); // 'cuutruyen' | 'mangadex'
   const [crawlerSearchQuery, setCrawlerSearchQuery] = useState('');
   const [crawlerSearchResults, setCrawlerSearchResults] = useState([]);
   const [isSearchingCrawler, setIsSearchingCrawler] = useState(false);
@@ -115,8 +114,8 @@ export default function AdminDashboard({
       setIsSearchingCrawler(true);
       try {
         let res = [];
-        if (crawlerSourceTab === 'otruyen') {
-          res = await api.searchOtruyenStories(crawlerSearchQuery);
+        if (crawlerSourceTab === 'cuutruyen') {
+          res = await api.searchCuutruyenStories(crawlerSearchQuery);
         } else {
           res = await api.searchMangadexStories(crawlerSearchQuery);
         }
@@ -143,8 +142,8 @@ export default function AdminDashboard({
 
     try {
       let res = null;
-      if (crawlerSourceTab === 'otruyen') {
-        res = await api.importOtruyenBySlug(item.slug);
+      if (crawlerSourceTab === 'cuutruyen') {
+        res = await api.importCuutruyenBySlug(item.slug);
       } else {
         res = await api.importMangadexById(item.id);
       }
@@ -164,15 +163,15 @@ export default function AdminDashboard({
     }
   };
 
-  const handleImportOtruyen = async (slugToImport) => {
-    const slug = (slugToImport || otruyenSlugInput).trim();
+  const handleImportCuutruyen = async (slugToImport) => {
+    const slug = (slugToImport || cuutruyenSlugInput).trim();
     if (!slug) {
-      showToast('Vui lòng nhập slug bộ truyện Otruyen (Ví dụ: solo-leveling, one-piece...)', 'error');
+      showToast('Vui lòng nhập slug hoặc ID bộ truyện CuuTruyen (Ví dụ: solo-leveling, 123...)', 'error');
       return;
     }
 
     setIsImporting(true);
-    setImportProgress({ current: 10, total: 100, percent: 10, text: `⚡ Đang kết nối Otruyen CDN kéo dữ liệu bộ "${slug}"...` });
+    setImportProgress({ current: 10, total: 100, percent: 10, text: `⚡ Đang kết nối CuuTruyen CDN kéo dữ liệu bộ "${slug}"...` });
 
     let prog = 10;
     const interval = setInterval(() => {
@@ -181,24 +180,24 @@ export default function AdminDashboard({
     }, 250);
 
     try {
-      const res = await api.importOtruyenStory(slug);
+      const res = await api.importCuutruyenBySlug(slug);
       clearInterval(interval);
       setImportProgress({ current: 100, total: 100, percent: 100, text: `🎉 Đã cào hoàn tất 100% bộ "${slug}"!` });
 
       if (res && res.success) {
         showToast(`⚡ Import thành công bộ truyện "${res.story?.name || slug}" và toàn bộ chapter!`);
         setTimeout(() => {
-          setShowOtruyenModal(false);
-          setOtruyenSlugInput('');
+          setShowCuutruyenModal(false);
+          setCuutruyenSlugInput('');
           setImportProgress({ current: 0, total: 0, percent: 0, text: '' });
         }, 1200);
         if (onRefreshStories) onRefreshStories();
       } else {
-        showToast(res?.message || 'Không thể import bộ truyện từ Otruyen API!', 'error');
+        showToast(res?.message || 'Không thể import bộ truyện từ CuuTruyen API!', 'error');
       }
     } catch (err) {
       clearInterval(interval);
-      showToast('Lỗi khi kết nối với Otruyen API!', 'error');
+      showToast('Lỗi khi kết nối với CuuTruyen API!', 'error');
     } finally {
       setIsImporting(false);
     }
@@ -239,14 +238,14 @@ export default function AdminDashboard({
     }, 400);
 
     try {
-      const res = await api.importBatchOtruyenStories(startPage, endPage);
+      const res = await api.importBatchCuutruyenStories(startPage, endPage);
       if (res && res.success) {
         showToast(res.message || `🚀 Đã kích hoạt cào ngầm từ Trang ${startPage} đến Trang ${endPage}! Truyện đang đổ về DB.`);
         startBackgroundPolling();
         setTimeout(() => {
           setImportProgress({ current: 100, total: 100, percent: 100, text: `🎉 Đã tải về toàn bộ danh sách trang ${startPage} → ${endPage}!` });
           setTimeout(() => {
-            setShowOtruyenModal(false);
+            setShowCuutruyenModal(false);
             setImportProgress({ current: 0, total: 0, percent: 0, text: '' });
           }, 1200);
         }, 3000);
@@ -256,7 +255,7 @@ export default function AdminDashboard({
       }
     } catch (err) {
       clearInterval(interval);
-      showToast('Lỗi khi kết nối kích hoạt cào hàng loạt từ Otruyen!', 'error');
+      showToast('Lỗi khi kết nối kích hoạt cào hàng loạt từ CuuTruyen!', 'error');
     } finally {
       setIsImporting(false);
     }
@@ -402,7 +401,8 @@ export default function AdminDashboard({
     setShowChapterModal(true);
 
     try {
-      const chapters = await api.getChaptersByStory(story.slug);
+      const slugOrId = story.slug || story.id;
+      const chapters = await api.getChaptersByStory(slugOrId);
       let list = Array.isArray(chapters) && chapters.length > 0 ? chapters : (story.chapters || []);
       const totalCount = story.totalChapters || (story.latestChapter ? parseInt(String(story.latestChapter).replace(/\D/g, ''), 10) : 0) || list.length || 10;
 
@@ -413,13 +413,13 @@ export default function AdminDashboard({
           const numStr = String(i);
           if (!existingNums.has(numStr)) {
             fullList.push({
-              id: `ch-auto-${story.slug}-${i}`,
-              storySlug: story.slug,
+              id: `ch-auto-${slugOrId}-${i}`,
+              storySlug: slugOrId,
               chapterName: numStr,
               chapterNumber: numStr,
               chapterTitle: `Chapter ${i}`,
               pages: [],
-              pageCount: Math.floor(18 + (i % 7))
+              pageCount: 20
             });
           }
         }
@@ -429,7 +429,21 @@ export default function AdminDashboard({
         setStoryChapters(list);
       }
     } catch (err) {
-      setStoryChapters(story.chapters || []);
+      console.error('Error fetching chapters for modal:', err);
+      const total = story.totalChapters || (story.latestChapter ? parseInt(String(story.latestChapter).replace(/\D/g, ''), 10) : 10);
+      const fallbackList = [];
+      for (let i = 1; i <= total; i++) {
+        fallbackList.push({
+          id: `ch-fb-${story.slug || story.id}-${i}`,
+          storySlug: story.slug || story.id,
+          chapterName: String(i),
+          chapterNumber: String(i),
+          chapterTitle: `Chapter ${i}`,
+          pages: [],
+          pageCount: 20
+        });
+      }
+      setStoryChapters(fallbackList);
     }
   };
 
@@ -786,7 +800,7 @@ export default function AdminDashboard({
                 <button className="btn-primary" style={{ backgroundColor: '#059669' }} onClick={() => setActiveTab('users')}>
                   👥 Quản Lý Thành Viên
                 </button>
-                <button className="btn-primary" style={{ backgroundColor: '#ec4899' }} onClick={() => setShowOtruyenModal(true)}>
+                <button className="btn-primary" style={{ backgroundColor: '#ec4899' }} onClick={() => setShowCuutruyenModal(true)}>
                   🔄 Đồng Bộ Từ Server Nguồn API
                 </button>
               </div>
@@ -861,7 +875,7 @@ export default function AdminDashboard({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
                   <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', borderLeft: '3px solid #ec4899' }}>
                     <div style={{ fontWeight: 600 }}>🔄 Đã khởi tạo kết nối Server Nguồn API</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>MangaDex & OTruyen API CDN sẵn sàng đồng bộ</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>MangaDex & CuuTruyen API CDN sẵn sàng đồng bộ</div>
                   </div>
                   <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '8px', borderLeft: '3px solid #10b981' }}>
                     <div style={{ fontWeight: 600 }}>👥 Phiên làm việc Admin</div>
@@ -901,7 +915,7 @@ export default function AdminDashboard({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setShowOtruyenModal(true);
+                    setShowCuutruyenModal(true);
                   }}
                 >
                   Đồng Bộ Từ Server Nguồn
@@ -1106,7 +1120,7 @@ export default function AdminDashboard({
           <div>
             <div className="admin-page-heading">
               <h2>📤 Đăng Chapter Mới Cho Bộ Truyện</h2>
-              <p>Chọn bộ truyện và dán danh sách Chapter (Hỗ trợ dán Hàng Loạt từ dữ liệu Otruyen API CDN).</p>
+              <p>Chọn bộ truyện và dán danh sách Chapter (Hỗ trợ dán Hàng Loạt từ dữ liệu CuuTruyen API CDN).</p>
             </div>
 
             {/* Mode Switcher Buttons */}
@@ -1156,7 +1170,7 @@ export default function AdminDashboard({
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setShowOtruyenModal(true);
+                            setShowCuutruyenModal(true);
                           }}
                         >
                           🌐 Đồng Bộ Truyện Từ Server CDN
@@ -1202,7 +1216,7 @@ export default function AdminDashboard({
                       className="form-control"
                       value={bulkChaptersInput}
                       onChange={(e) => setBulkChaptersInput(e.target.value)}
-                      placeholder={`Ví dụ (Dán toàn bộ danh sách Otruyen):&#10;1174|https://sv1.otruyencdn.com/v1/api/chapter/698d5090e0d753f32e5867f3|Đại Chiến Đảo Hải Tặc&#10;1173.5|https://sv1.otruyencdn.com/v1/api/chapter/69a277d37b89b5b2570dde59|&#10;1173|https://sv1.otruyencdn.com/v1/api/chapter/69a277d37b89b5b2570dde5c|Trận Chiến Cuối Cùng`}
+                      placeholder={`Ví dụ (Dán toàn bộ danh sách CuuTruyen):\n1174|https://cuutruyen.net/api/v2/chapters/12345|Đại Chiến Đảo Hải Tặc\n1173.5|https://cuutruyen.net/api/v2/chapters/12344|\n1173|https://cuutruyen.net/api/v2/chapters/12343|Trận Chiến Cuối Cùng`}
                       style={{ fontFamily: 'monospace', fontSize: '12px', lineHeight: '1.5' }}
                     />
                   </div>
@@ -1651,7 +1665,7 @@ export default function AdminDashboard({
               ) : (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <div className="loading-spinner" style={{ margin: '0 auto 12px auto' }}></div>
-                  Đang tự động tải danh sách trang ảnh Webtoon từ Otruyen CDN...
+                  Đang tự động tải danh sách trang ảnh Webtoon từ CuuTruyen CDN...
                 </div>
               )}
             </div>
@@ -1792,12 +1806,12 @@ export default function AdminDashboard({
       )}
 
       {/* MULTI-SOURCE MANGA AUTO-CRAWLER MODAL */}
-      {showOtruyenModal && (
-        <div className="admin-modal-overlay" onClick={() => !isImporting && setShowOtruyenModal(false)}>
+      {showCuutruyenModal && (
+        <div className="admin-modal-overlay" onClick={() => !isImporting && setShowCuutruyenModal(false)}>
           <div className="admin-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
             <div className="admin-modal-header" style={{ marginBottom: '16px' }}>
               <h3>Đồng Bộ Dữ Liệu Từ Server Nguồn API</h3>
-              <button className="close-btn" onClick={() => !isImporting && setShowOtruyenModal(false)}>✕</button>
+              <button className="close-btn" onClick={() => !isImporting && setShowCuutruyenModal(false)}>✕</button>
             </div>
 
             {/* AUTO-CRAWLER SCHEDULER CONTROL & LOGS WIDGET */}
@@ -1808,7 +1822,7 @@ export default function AdminDashboard({
                     <span>🤖</span> Auto-Crawler Pipeline: <span style={{ color: '#10b981', fontWeight: 900 }}>ĐANG BẬT (5 phút/lần)</span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Cơ chế Differential Sync (Tránh 429) & Tự động xóa Redis Cache khi có chap mới.
+                    Cơ chế Differential Sync & Tự động xóa Redis Cache khi có chap mới từ {crawlerSourceTab === 'mangadex' ? 'MangaDex Global' : 'CuuTruyen API'}.
                   </div>
                 </div>
                 <button
@@ -1818,7 +1832,7 @@ export default function AdminDashboard({
                   onClick={handleManualTriggerSync}
                   disabled={isSyncingLatest || isImporting}
                 >
-                  {isSyncingLatest ? '⚡ Đang quét Otruyen...' : '⚡ Kích Hoạt Cào Ngay'}
+                  {isSyncingLatest ? `⚡ Đang quét ${crawlerSourceTab === 'mangadex' ? 'MangaDex' : 'CuuTruyen'}...` : `⚡ Kích Hoạt Cào ${crawlerSourceTab === 'mangadex' ? 'MangaDex' : 'CuuTruyen'}`}
                 </button>
               </div>
 
@@ -1940,13 +1954,13 @@ export default function AdminDashboard({
                   fontWeight: 700,
                   fontSize: '13px',
                   cursor: 'pointer',
-                  backgroundColor: crawlerSourceTab === 'otruyen' ? 'var(--accent-pink)' : 'transparent',
-                  color: crawlerSourceTab === 'otruyen' ? '#fff' : 'var(--text-secondary)',
+                  backgroundColor: crawlerSourceTab === 'cuutruyen' ? 'var(--accent-pink)' : 'transparent',
+                  color: crawlerSourceTab === 'cuutruyen' ? '#fff' : 'var(--text-secondary)',
                   transition: 'all 0.2s ease'
                 }}
-                onClick={() => { setCrawlerSourceTab('otruyen'); setCrawlerSearchResults([]); setCrawlerSearchQuery(''); }}
+                onClick={() => { setCrawlerSourceTab('cuutruyen'); setCrawlerSearchResults([]); setCrawlerSearchQuery(''); }}
               >
-                Nguồn OTruyen CDN
+                Nguồn CuuTruyen API / CDN
               </button>
               <button
                 type="button"
@@ -1981,7 +1995,7 @@ export default function AdminDashboard({
                   type="text"
                   className="form-control"
                   style={{ padding: '10px 14px 10px 38px', fontSize: '14px' }}
-                  placeholder={crawlerSourceTab === 'otruyen' ? "Nhập tên truyện (Ví dụ: Mato Seihei No Slave, Solo Leveling...)" : "Nhập tên truyện (Ví dụ: Mato Seihei No Slave, Chainsaw Man...)"}
+                  placeholder={crawlerSourceTab === 'cuutruyen' ? "Nhập tên hoặc slug/ID truyện (Ví dụ: solo-leveling, 123...)" : "Nhập tên truyện (Ví dụ: Mato Seihei No Slave, Chainsaw Man...)"}
                   value={crawlerSearchQuery}
                   onChange={(e) => setCrawlerSearchQuery(e.target.value)}
                 />
@@ -2030,7 +2044,7 @@ export default function AdminDashboard({
                       type="button"
                       className="btn-primary"
                       style={{
-                        backgroundColor: crawlerSourceTab === 'otruyen' ? '#ec4899' : '#8b5cf6',
+                        backgroundColor: crawlerSourceTab === 'cuutruyen' ? '#ec4899' : '#8b5cf6',
                         padding: '8px 14px',
                         fontSize: '12px',
                         fontWeight: 700,
@@ -2124,7 +2138,7 @@ export default function AdminDashboard({
             )}
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button type="button" className="btn-secondary" onClick={() => setShowOtruyenModal(false)} disabled={isImporting}>
+              <button type="button" className="btn-secondary" onClick={() => setShowCuutruyenModal(false)} disabled={isImporting}>
                 Đóng
               </button>
             </div>

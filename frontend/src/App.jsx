@@ -77,6 +77,38 @@ export default function App() {
   const [selectedStory, setSelectedStory] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
 
+  // Image Server State ('server1' | 'serverVip' | 'serverProxy' | 'serverDataSaver')
+  const [imageServer, setImageServer] = useState(() => localStorage.getItem('mangacloud_image_server') || 'server1');
+
+  const transformImageUrl = (rawUrl, server) => {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    let url = rawUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = `https://uploads.mangadex.org/data/${url}`;
+    }
+    url = url.replace(/https:\/\/[a-zA-Z0-9.-]+\.mangadex\.network/, 'https://uploads.mangadex.org');
+
+    if (server === 'serverVip') {
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&default=${encodeURIComponent(url)}`;
+    } else if (server === 'serverProxy') {
+      return `/api/v1/proxy-image?url=${encodeURIComponent(url)}`;
+    } else if (server === 'serverDataSaver') {
+      return url.replace('/data/', '/data-saver/');
+    }
+    return url;
+  };
+
+  const handleReportBrokenChapter = () => {
+    showToast('⚠️ Đã tiếp nhận báo lỗi chương! Hệ thống tự động chuyển sang Server VIP & Proxy cứu hộ.', 'success');
+    if (imageServer === 'server1') {
+      setImageServer('serverVip');
+      localStorage.setItem('mangacloud_image_server', 'serverVip');
+    } else if (imageServer === 'serverVip') {
+      setImageServer('serverProxy');
+      localStorage.setItem('mangacloud_image_server', 'serverProxy');
+    }
+  };
+
   // Admin View State
   const [adminActiveNav, setAdminActiveNav] = useState('Dashboard');
 
@@ -144,21 +176,13 @@ export default function App() {
       return DEFAULT_COVER_IMAGE;
     }
     let res = url.trim();
-    // Normalize any otruyenapi domain variations to img.otruyenapi.com
-    res = res.replace(/https?:\/\/(img\.)*otruyenapi\.com/g, 'https://img.otruyenapi.com');
     if (!res.startsWith('http://') && !res.startsWith('https://')) {
-      res = `https://img.otruyenapi.com/uploads/comics/${res.replace(/^\/+/, '')}`;
+      return DEFAULT_COVER_IMAGE;
     }
     return res;
   };
 
   const getStoryPosterUrl = (storySlug, fallbackUrl) => {
-    const slugLower = (storySlug || '').toLowerCase();
-    if (slugLower.includes('solo-leveling')) return 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&auto=format&fit=crop&q=80';
-    if (slugLower.includes('one-piece') || slugLower.includes('vua-hai-tac')) return 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400&auto=format&fit=crop&q=80';
-    if (slugLower.includes('dragon-ball') || slugLower.includes('bay-vien-ngoc')) return 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80';
-    if (slugLower.includes('naruto')) return 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80';
-
     const matched = Array.isArray(stories) ? stories.find(s => s.slug === storySlug || s.id === storySlug || (s.slug && storySlug && s.slug.includes(storySlug))) : null;
     if (matched && matched.thumbUrl) {
       return sanitizeThumbUrl(matched.thumbUrl);
@@ -615,8 +639,8 @@ export default function App() {
       }
       const saved = localStorage.getItem('mangacloud_history');
       return saved ? JSON.parse(saved) : [
-        { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/solo-leveling-thumb.jpg', readAt: new Date(Date.now() - 3600000).toISOString() },
-        { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/one-piece-thumb.jpg', readAt: new Date(Date.now() - 86400000).toISOString() }
+        { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://uploads.mangadex.org/covers/32d76d19-8a05-4db0-9fc2-e0b0648fe9d0/b77d61c6-1c88-4680-a6ff-e722bf72cf19.jpg', readAt: new Date(Date.now() - 3600000).toISOString() },
+        { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://uploads.mangadex.org/covers/a1c5d8fb-722a-4573-9f8b-da9f050d3757/8ec56453-2736-47bd-b2ea-9e7f7808269d.jpg', readAt: new Date(Date.now() - 86400000).toISOString() }
       ];
     } catch (e) { return []; }
   });
@@ -1841,6 +1865,7 @@ export default function App() {
                     <img
                       src={sanitizeThumbUrl(s.thumbUrl)}
                       alt={s.name || 'Manga'}
+                      referrerPolicy="no-referrer"
                       className="today-recommendation-img"
                       onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                     />
@@ -1863,9 +1888,9 @@ export default function App() {
                         </div>
                         <button
                           className="btn-primary today-recommendation-btn"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/read/${s.slug}/1`); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/story/${s.slug}`); }}
                         >
-                          📖 Đọc ngay
+                          📖 Xem chi tiết
                         </button>
                       </div>
                     </div>
@@ -2794,6 +2819,7 @@ export default function App() {
                           <img
                             src={sanitizeThumbUrl(story.thumbUrl)}
                             alt={story.name}
+                            referrerPolicy="no-referrer"
                             className="manga-cover-img"
                             onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                           />
@@ -2986,6 +3012,7 @@ export default function App() {
                 <img
                   src={sanitizeThumbUrl(selectedStory.thumbUrl)}
                   alt={selectedStory.name}
+                  referrerPolicy="no-referrer"
                   className="story-detail-poster-img"
                   onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                 />
@@ -3040,7 +3067,10 @@ export default function App() {
                     type="button"
                     className="btn-primary"
                     style={{ backgroundColor: '#22c55e', padding: '10px 20px', fontSize: '13px', fontWeight: 700 }}
-                    onClick={() => navigate(`/read/${selectedStory.slug}/1`)}
+                    onClick={() => {
+                      const firstCh = (Array.isArray(storyChaptersList) && storyChaptersList.length > 0) ? (storyChaptersList[0].chapterName || '0') : '1';
+                      navigate(`/read/${selectedStory.slug}/${firstCh}`);
+                    }}
                   >
                     📗 Đọc từ đầu
                   </button>
@@ -3482,6 +3512,68 @@ export default function App() {
               </div>
             </header>
 
+            {/* SERVER IMAGE SWITCHER TOOLBAR (Ổ Truyện Style) */}
+            <div className="reader-server-toolbar">
+              <div className="server-notice-row">
+                <span className="server-notice-text">
+                  Nếu không xem được truyện vui lòng đổi <strong>"SERVER HÌNH"</strong> bên dưới
+                </span>
+              </div>
+              <div className="server-action-row">
+                <div className="server-buttons-group">
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'server1' ? 'active-s1' : ''}`}
+                    onClick={() => {
+                      setImageServer('server1');
+                      localStorage.setItem('mangacloud_image_server', 'server1');
+                      showToast('🟢 Đã chuyển sang Server 1 (MangaDex Gốc)', 'info');
+                    }}
+                  >
+                    Server 1
+                  </button>
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'serverVip' ? 'active-svip' : ''}`}
+                    onClick={() => {
+                      setImageServer('serverVip');
+                      localStorage.setItem('mangacloud_image_server', 'serverVip');
+                      showToast('⚡ Đã chuyển sang Server VIP (Cloudflare WebP Tốc độ cao)', 'info');
+                    }}
+                  >
+                    Server VIP
+                  </button>
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'serverProxy' ? 'active-s2' : ''}`}
+                    onClick={() => {
+                      setImageServer('serverProxy');
+                      localStorage.setItem('mangacloud_image_server', 'serverProxy');
+                      showToast('🛡️ Đã chuyển sang Server 2 (Proxy Cứu Hộ)', 'info');
+                    }}
+                  >
+                    Server 2
+                  </button>
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'serverDataSaver' ? 'active-s3' : ''}`}
+                    onClick={() => {
+                      setImageServer('serverDataSaver');
+                      localStorage.setItem('mangacloud_image_server', 'serverDataSaver');
+                      showToast('🚀 Đã chuyển sang Server 3 (Tiết Kiệm Dung Lượng)', 'info');
+                    }}
+                  >
+                    Server 3
+                  </button>
+                </div>
+                <div className="server-report-box">
+                  <button type="button" className="btn-report-chapter-broken" onClick={handleReportBrokenChapter}>
+                    ⚠️ Báo Lỗi Chương
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* WEBTOON IMAGE CANVAS */}
             <main className="webtoon-canvas">
               {chapterLoading ? (
@@ -3491,25 +3583,109 @@ export default function App() {
                 </div>
               ) : (
                 (() => {
-                  const pagesList = (chapterDetail?.imageUrls && chapterDetail.imageUrls.length > 0)
+                  const rawPages = (chapterDetail?.imageUrls && chapterDetail.imageUrls.length > 0)
                     ? chapterDetail.imageUrls
                     : (chapterDetail?.pages && chapterDetail.pages.length > 0)
                       ? chapterDetail.pages
-                      : [
-                        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1000&auto=format&fit=crop&q=80'
-                      ];
+                      : [];
+
+                  let basePrefix = '';
+                  const firstValid = rawPages.find(u => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://')));
+                  if (firstValid) {
+                    basePrefix = firstValid.substring(0, firstValid.lastIndexOf('/') + 1);
+                  }
+
+                  const pagesList = rawPages.map(url => {
+                    if (!url || typeof url !== 'string') return null;
+                    let trimmed = url.trim();
+                    let finalUrl = trimmed;
+                    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+                      finalUrl = basePrefix ? `${basePrefix}${trimmed}` : `https://uploads.mangadex.org/data/${trimmed}`;
+                    }
+                    return finalUrl.replace(/https:\/\/[a-zA-Z0-9.-]+\.mangadex\.network/, 'https://uploads.mangadex.org');
+                  }).filter(Boolean);
+
+                  if (pagesList.length === 0) {
+                    return (
+                      <div className="chapter-error-card" style={{
+                        padding: '50px 24px',
+                        textAlign: 'center',
+                        maxWidth: '640px',
+                        margin: '40px auto',
+                        background: 'rgba(25, 27, 44, 0.95)',
+                        border: '1px solid rgba(255, 107, 107, 0.3)',
+                        borderRadius: '20px',
+                        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6)',
+                        color: '#fff',
+                        backdropFilter: 'blur(10px)'
+                      }}>
+                        <div style={{ fontSize: '56px', marginBottom: '16px' }}>⚡</div>
+                        <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#ff6b6b', marginBottom: '12px' }}>
+                          Không thể tải trang ảnh của Chapter {selectedChapter || '1'}
+                        </h3>
+                        <p style={{ color: '#c0c5e0', fontSize: '14.5px', lineHeight: '1.6', marginBottom: '24px' }}>
+                          Máy chủ nguồn <strong>MangaDex Global CDN</strong> hiện đang phản hồi chậm hoặc chưa sẵn sàng trang ảnh.
+                          Vui lòng bấm đổi <strong>Server VIP</strong> hoặc bấm thử lại bên dưới.
+                        </p>
+                        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: '600', borderRadius: '10px', cursor: 'pointer' }}
+                            onClick={() => {
+                              const slug = routePath.replace('/read/', '').split('/')[0];
+                              loadChapterContentAndComments(slug, selectedChapter || '1');
+                            }}
+                          >
+                            🔄 Thử lại ngay
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: '600', borderRadius: '10px', cursor: 'pointer' }}
+                            onClick={() => {
+                              setImageServer('serverVip');
+                              localStorage.setItem('mangacloud_image_server', 'serverVip');
+                              showToast('⚡ Đã chuyển sang Server VIP!', 'success');
+                            }}
+                          >
+                            ⚡ Thử Server VIP
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: '600', borderRadius: '10px', cursor: 'pointer' }}
+                            onClick={() => {
+                              const slug = routePath.replace('/read/', '').split('/')[0];
+                              navigate(`/read/${slug}/${Number(selectedChapter || 1) + 1}`);
+                            }}
+                          >
+                            ⏭️ Xem Tập Sau ›
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return pagesList.map((imgUrl, idx) => (
                     <img
-                      key={idx}
-                      src={imgUrl}
-                      alt={`Page ${idx + 1}`}
+                      key={`${idx}-${imageServer}`}
+                      src={transformImageUrl(imgUrl, imageServer)}
+                      alt={`Trang ${idx + 1}`}
+                      referrerPolicy="no-referrer"
                       className="webtoon-page-img"
-                      loading="lazy"
-                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_WEBTOON_PAGE; }}
+                      loading={idx < 4 ? 'eager' : 'lazy'}
+                      onError={(e) => {
+                        // Auto-fallback sequence on 404 / connection error:
+                        const curr = e.currentTarget.src || '';
+                        if (!curr.includes('wsrv.nl') && !curr.includes('/api/v1/proxy-image')) {
+                          // Fallback to Server VIP
+                          e.currentTarget.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=webp&default=${encodeURIComponent(imgUrl)}`;
+                        } else if (!curr.includes('/api/v1/proxy-image')) {
+                          // Fallback to Server 2 Proxy
+                          e.currentTarget.src = `/api/v1/proxy-image?url=${encodeURIComponent(imgUrl)}`;
+                        } else {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.style.display = 'none';
+                        }
+                      }}
                     />
                   ));
                 })()

@@ -82,25 +82,24 @@ export default function AdminDashboard({
 
   const handleManualTriggerSync = async () => {
     setIsSyncingLatest(true);
-    showToast('⚡ Đã kích hoạt tác vụ cào ngầm! Đang quét Otruyen API...');
+    showToast('⚡ Đã kích hoạt tác vụ cào ngầm! Đang quét MangaDex Global...');
     try {
       const res = await api.syncLatestChapters();
       if (res && res.success) {
-        showToast(`✅ ${res.message}`);
+        showToast(res.message || '⚡ Đã hoàn tất quét đồng bộ MangaDex!');
         if (onRefreshStories) onRefreshStories();
         fetchCrawlerLogs();
       } else {
-        showToast(res?.message || 'Có lỗi xảy ra khi đồng bộ!', 'error');
+        showToast(res?.message || 'Có lỗi xảy ra khi đồng bộ MangaDex!', 'error');
       }
     } catch (err) {
-      showToast('Lỗi khi kích hoạt cào ngầm!', 'error');
+      showToast('Lỗi khi kích hoạt đồng bộ: ' + err.message, 'error');
     } finally {
       setIsSyncingLatest(false);
     }
   };
 
-  // 1-Click Multi-Source Auto-Crawler State
-  const [crawlerSourceTab, setCrawlerSourceTab] = useState('otruyen'); // 'otruyen' | 'mangadex'
+  // 1-Click MangaDex Global Auto-Crawler State
   const [crawlerSearchQuery, setCrawlerSearchQuery] = useState('');
   const [crawlerSearchResults, setCrawlerSearchResults] = useState([]);
   const [isSearchingCrawler, setIsSearchingCrawler] = useState(false);
@@ -114,12 +113,7 @@ export default function AdminDashboard({
     const timer = setTimeout(async () => {
       setIsSearchingCrawler(true);
       try {
-        let res = [];
-        if (crawlerSourceTab === 'otruyen') {
-          res = await api.searchOtruyenStories(crawlerSearchQuery);
-        } else {
-          res = await api.searchMangadexStories(crawlerSearchQuery);
-        }
+        const res = await api.searchMangadexStories(crawlerSearchQuery);
         setCrawlerSearchResults(Array.isArray(res) ? res : []);
       } catch (e) {
         setCrawlerSearchResults([]);
@@ -128,29 +122,24 @@ export default function AdminDashboard({
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [crawlerSearchQuery, crawlerSourceTab]);
+  }, [crawlerSearchQuery]);
 
   const handle1ClickImport = async (item) => {
     setIsImporting(true);
     const name = item.name || item.slug || 'Bộ truyện';
-    setImportProgress({ current: 10, total: 100, percent: 10, text: `⚡ Đang cào toàn bộ Chapter cho "${name}"...` });
+    setImportProgress({ current: 10, total: 100, percent: 10, text: `⚡ Đang cào toàn bộ Chapter MangaDex cho "${name}"...` });
 
     let prog = 10;
     const interval = setInterval(() => {
       prog = Math.min(95, prog + 15);
-      setImportProgress({ current: prog, total: 100, percent: prog, text: `⚡ Đang nạp danh sách Chapter & ảnh trang truyện (${prog}%)...` });
+      setImportProgress({ current: prog, total: 100, percent: prog, text: `⚡ Đang nạp danh sách Chapter & ảnh trang truyện MangaDex (${prog}%)...` });
     }, 300);
 
     try {
-      let res = null;
-      if (crawlerSourceTab === 'otruyen') {
-        res = await api.importOtruyenBySlug(item.slug);
-      } else {
-        res = await api.importMangadexById(item.id);
-      }
+      const res = await api.importMangadexById(item.id);
       clearInterval(interval);
-      setImportProgress({ current: 100, total: 100, percent: 100, text: '🎉 Đã cào và xuất bản thành công!' });
-      showToast(res?.message || `Đã đăng hàng loạt bộ "${name}" thành công!`);
+      setImportProgress({ current: 100, total: 100, percent: 100, text: '🎉 Đã cào và lưu MangaDex thành công!' });
+      showToast(res?.message || `Đã import bộ truyện "${name}" thành công!`);
       if (onRefreshStories) onRefreshStories();
       setTimeout(() => {
         setIsImporting(false);
@@ -160,7 +149,7 @@ export default function AdminDashboard({
       clearInterval(interval);
       setIsImporting(false);
       setImportProgress({ current: 0, total: 0, percent: 0, text: '' });
-      showToast(err.message || 'Lỗi khi cào bộ truyện!', 'error');
+      showToast(err.message || 'Lỗi khi cào bộ truyện từ MangaDex!', 'error');
     }
   };
 
@@ -222,32 +211,50 @@ export default function AdminDashboard({
   const [startPageInput, setStartPageInput] = useState(1);
   const [endPageInput, setEndPageInput] = useState(5);
 
-  const handleBatchImport = async (startPage = 1, endPage = 5) => {
-    setIsImporting(true);
-    setImportProgress({ current: 5, total: 100, percent: 5, text: `🚀 Bắt đầu cào Hàng Loạt từ Trang ${startPage} → ${endPage}...` });
+  const handleClearOtruyen = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn dọn dẹp và xóa toàn bộ các bộ truyện cũ cào từ Otruyen (đang bị lỗi 504) khỏi Database không?')) return;
+    try {
+      showToast('Đang tiến hành dọn dẹp truyện Otruyen cũ...');
+      const res = await api.clearOtruyenStories();
+      if (res && res.success) {
+        showToast(res.message || 'Đã dọn dẹp sạch sẽ các truyện Otruyen lỗi!');
+        if (onRefreshStories) onRefreshStories();
+        fetchCrawlerLogs();
+      } else {
+        showToast(res?.message || 'Không thể dọn dẹp!', 'error');
+      }
+    } catch (e) {
+      showToast('Lỗi khi dọn dẹp truyện Otruyen: ' + e.message, 'error');
+    }
+  };
 
-    let prog = 5;
+  const handleBatchImport = async (limit = 30) => {
+    setIsImporting(true);
+    setImportProgress({ current: 10, total: 100, percent: 10, text: `🚀 Đang kích hoạt cào Top ${limit} bộ truyện Hot nhất từ MangaDex Global CDN...` });
+
+    let prog = 10;
     const interval = setInterval(() => {
-      prog = Math.min(98, prog + 5);
+      prog = Math.min(98, prog + 10);
       setImportProgress({
         current: prog,
         total: 100,
         percent: prog,
-        text: `⚡ Đang tự động cào và lưu truyện vào Database... ${prog}%`
+        text: `⚡ Đang tự động cào và nạp truyện từ MangaDex vào Database... ${prog}%`
       });
       if (prog >= 98) clearInterval(interval);
     }, 400);
 
     try {
-      const res = await api.importBatchOtruyenStories(startPage, endPage);
+      const res = await api.importBatchMangadexStories(limit);
       if (res && res.success) {
-        showToast(res.message || `🚀 Đã kích hoạt cào ngầm từ Trang ${startPage} đến Trang ${endPage}! Truyện đang đổ về DB.`);
+        showToast(res.message || `🚀 Đã kích hoạt cào ngầm Top ${limit} truyện MangaDex thành công!`);
         startBackgroundPolling();
         setTimeout(() => {
-          setImportProgress({ current: 100, total: 100, percent: 100, text: `🎉 Đã tải về toàn bộ danh sách trang ${startPage} → ${endPage}!` });
+          setImportProgress({ current: 100, total: 100, percent: 100, text: `🎉 Đã hoàn tất cào ngầm MangaDex!` });
           setTimeout(() => {
             setShowOtruyenModal(false);
             setImportProgress({ current: 0, total: 0, percent: 0, text: '' });
+            if (onRefreshStories) onRefreshStories();
           }, 1200);
         }, 3000);
       } else {
@@ -256,7 +263,7 @@ export default function AdminDashboard({
       }
     } catch (err) {
       clearInterval(interval);
-      showToast('Lỗi khi kết nối kích hoạt cào hàng loạt từ Otruyen!', 'error');
+      showToast('Lỗi khi kết nối kích hoạt cào hàng loạt từ MangaDex!', 'error');
     } finally {
       setIsImporting(false);
     }
@@ -1796,29 +1803,29 @@ export default function AdminDashboard({
         <div className="admin-modal-overlay" onClick={() => !isImporting && setShowOtruyenModal(false)}>
           <div className="admin-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
             <div className="admin-modal-header" style={{ marginBottom: '16px' }}>
-              <h3>Đồng Bộ Dữ Liệu Từ Server Nguồn API</h3>
+              <h3>Đồng Bộ Dữ Liệu MangaDex Global CDN</h3>
               <button className="close-btn" onClick={() => !isImporting && setShowOtruyenModal(false)}>✕</button>
             </div>
 
             {/* AUTO-CRAWLER SCHEDULER CONTROL & LOGS WIDGET */}
-            <div style={{ backgroundColor: 'rgba(236, 72, 153, 0.06)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid var(--accent-pink)' }}>
+            <div style={{ backgroundColor: 'rgba(139, 92, 246, 0.06)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🤖</span> Auto-Crawler Pipeline: <span style={{ color: '#10b981', fontWeight: 900 }}>ĐANG BẬT (5 phút/lần)</span>
+                    <span>🤖</span> Auto-Crawler Pipeline: <span style={{ color: '#10b981', fontWeight: 900 }}>ĐANG BẬT (MangaDex Global)</span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Cơ chế Differential Sync (Tránh 429) & Tự động xóa Redis Cache khi có chap mới.
+                    Tự động đồng bộ các chapter MangaDex mới nhất & làm mới Cache.
                   </div>
                 </div>
                 <button
                   type="button"
                   className="btn-primary"
-                  style={{ backgroundColor: '#22c55e', padding: '8px 16px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  style={{ backgroundColor: '#8b5cf6', padding: '8px 16px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
                   onClick={handleManualTriggerSync}
                   disabled={isSyncingLatest || isImporting}
                 >
-                  {isSyncingLatest ? '⚡ Đang quét Otruyen...' : '⚡ Kích Hoạt Cào Ngay'}
+                  {isSyncingLatest ? '⚡ Đang quét MangaDex...' : '⚡ Kích Hoạt Cào Ngay'}
                 </button>
               </div>
 
@@ -1928,67 +1935,40 @@ export default function AdminDashboard({
               )}
             </div>
 
-            {/* Source Tab Switcher */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', backgroundColor: 'var(--bg-body)', padding: '4px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              <button
-                type="button"
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  backgroundColor: crawlerSourceTab === 'otruyen' ? 'var(--accent-pink)' : 'transparent',
-                  color: crawlerSourceTab === 'otruyen' ? '#fff' : 'var(--text-secondary)',
-                  transition: 'all 0.2s ease'
-                }}
-                onClick={() => { setCrawlerSourceTab('otruyen'); setCrawlerSearchResults([]); setCrawlerSearchQuery(''); }}
-              >
-                Nguồn OTruyen CDN
-              </button>
-              <button
-                type="button"
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  backgroundColor: crawlerSourceTab === 'mangadex' ? '#8b5cf6' : 'transparent',
-                  color: crawlerSourceTab === 'mangadex' ? '#fff' : 'var(--text-secondary)',
-                  transition: 'all 0.2s ease'
-                }}
-                onClick={() => { setCrawlerSourceTab('mangadex'); setCrawlerSearchResults([]); setCrawlerSearchQuery(''); }}
-              >
-                Nguồn MangaDex Global (Tiếng Việt)
-              </button>
+            {/* MangaDex Global Source Banner */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', backgroundColor: 'rgba(139, 92, 246, 0.1)', padding: '12px 16px', borderRadius: '12px', border: '1px solid #8b5cf6' }}>
+              <span style={{ fontSize: '18px' }}>🌐</span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '13px', color: '#8b5cf6' }}>
+                  Nguồn Dữ Liệu: MangaDex Global CDN (Full Chapter Tiếng Anh & Quốc Tế)
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Hạ tầng CDN phân tán toàn cầu, Uptime 99.99%, lưu trực tiếp trang ảnh chất lượng cao vào Database.
+                </div>
+              </div>
             </div>
 
             {/* SEARCH INPUT BOX */}
             <div style={{ marginBottom: '20px', backgroundColor: 'var(--bg-hover)', padding: '16px', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
               <label className="form-label" style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', color: 'var(--text-primary)', display: 'block' }}>
-                Tìm kiếm & Đồng bộ theo bộ truyện:
+                Tìm kiếm & Cào truyện từ MangaDex:
               </label>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                Nhập tên bộ truyện để tra cứu trực tiếp dữ liệu từ Server API nguồn.
+                Nhập tên bộ truyện tiếng Anh để tra cứu trực tiếp từ kho MangaDex.
               </div>
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
                   className="form-control"
                   style={{ padding: '10px 14px 10px 38px', fontSize: '14px' }}
-                  placeholder={crawlerSourceTab === 'otruyen' ? "Nhập tên truyện (Ví dụ: Mato Seihei No Slave, Solo Leveling...)" : "Nhập tên truyện (Ví dụ: Mato Seihei No Slave, Chainsaw Man...)"}
+                  placeholder="Nhập tên truyện tiếng Anh (Ví dụ: Solo Leveling, One Piece, Chainsaw Man, Naruto...)"
                   value={crawlerSearchQuery}
                   onChange={(e) => setCrawlerSearchQuery(e.target.value)}
                 />
                 <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.6 }}>🔍</span>
                 {isSearchingCrawler && (
-                  <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--accent-pink)' }}>
-                    Đang tra cứu...
+                  <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#8b5cf6' }}>
+                    Đang tra cứu MangaDex...
                   </span>
                 )}
               </div>
@@ -2014,7 +1994,7 @@ export default function AdminDashboard({
                     <img
                       src={item.thumbUrl || DEFAULT_COVER_IMAGE}
                       alt={item.name}
-                      style={{ width: '42px', height: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--accent-pink)' }}
+                      style={{ width: '42px', height: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #8b5cf6' }}
                       onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                     />
                     <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -2030,7 +2010,7 @@ export default function AdminDashboard({
                       type="button"
                       className="btn-primary"
                       style={{
-                        backgroundColor: crawlerSourceTab === 'otruyen' ? '#ec4899' : '#8b5cf6',
+                        backgroundColor: '#8b5cf6',
                         padding: '8px 14px',
                         fontSize: '12px',
                         fontWeight: 700,
@@ -2039,62 +2019,37 @@ export default function AdminDashboard({
                       onClick={() => handle1ClickImport(item)}
                       disabled={isImporting}
                     >
-                      Đồng Bổ Tất Cả Chapter
+                      Đồng Bộ MangaDex
                     </button>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* BATCH PAGE RANGE SECTION */}
+            {/* BATCH IMPORT & DB CLEANUP ACTIONS */}
             <div style={{ backgroundColor: 'var(--bg-hover)', padding: '16px', borderRadius: '12px', marginBottom: '20px', border: '1px solid var(--border-color)' }}>
-              <label className="form-label" style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px', display: 'block' }}>
-                Đồng bộ hàng loạt theo danh sách trang:
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', display: 'block', color: 'var(--text-primary)' }}>
+                Tác vụ nhanh MangaDex & Dọn dẹp Database:
               </label>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                Tự động quét và đồng bộ nhiều bộ truyện theo phạm vi trang.
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Từ Trang:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    className="form-control"
-                    style={{ padding: '6px 10px', marginTop: '4px' }}
-                    value={startPageInput}
-                    onChange={(e) => {
-                      const start = Math.max(1, parseInt(e.target.value) || 1);
-                      setStartPageInput(start);
-                      if (endPageInput < start) {
-                        setEndPageInput(start + 4);
-                      }
-                    }}
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Đến Trang:</span>
-                  <input
-                    type="number"
-                    min={startPageInput}
-                    className="form-control"
-                    style={{ padding: '6px 10px', marginTop: '4px' }}
-                    value={endPageInput}
-                    onChange={(e) => setEndPageInput(Math.max(startPageInput, parseInt(e.target.value) || startPageInput))}
-                  />
-                </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
                 <button
                   type="button"
                   className="btn-primary"
-                  style={{ backgroundColor: '#8b5cf6', marginTop: '18px', padding: '8px 12px', fontSize: '13px' }}
-                  onClick={() => {
-                    const effectiveEnd = Math.max(startPageInput, endPageInput);
-                    handleBatchImport(startPageInput, effectiveEnd);
-                  }}
+                  style={{ backgroundColor: '#8b5cf6', flex: 1, minWidth: '200px', padding: '10px 16px', fontSize: '13px', fontWeight: 700 }}
+                  onClick={() => handleBatchImport(30)}
                   disabled={isImporting}
                 >
-                  Đồng Bộ Trang {startPageInput} → {Math.max(startPageInput, endPageInput)}
+                  🚀 Cào Tự Động Top 30 Truyện Hot MangaDex
+                </button>
+                <button
+                  type="button"
+                  className="btn-danger"
+                  style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                  onClick={handleClearOtruyen}
+                  disabled={isImporting}
+                >
+                  🧹 Xóa Truyện Otruyen Cũ (Lỗi 504)
                 </button>
               </div>
             </div>

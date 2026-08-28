@@ -1,6 +1,6 @@
 package truyen.cloud.scheduler;
 
-import truyen.cloud.service.OtruyenImportService;
+import truyen.cloud.service.MangadexImportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,16 +10,16 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @Slf4j
 public class StorySyncScheduler {
-    private final OtruyenImportService otruyenImportService;
+    private final MangadexImportService mangadexImportService;
 
-    @Scheduled(cron = "${app.scheduler.cron:0 */5 * * * *}", zone = "Asia/Ho_Chi_Minh")
-    public void autoSyncOtruyenNewChapters() {
-        log.info("[Scheduler Task - 5 phút/lần] Đang tự động quét kiểm tra chap mới trên Otruyen...");
+    @Scheduled(cron = "${app.scheduler.cron:0 */10 * * * *}", zone = "Asia/Ho_Chi_Minh")
+    public void autoSyncNewChapters() {
+        log.info("⏰ [MangaCloud Scheduler] Đang tự động kiểm tra chapter mới từ MangaDex Global CDN...");
         try {
-            int synced = otruyenImportService.syncLatestNewChapters("AUTO_SCHEDULED");
-            log.info("[Scheduler Task] Đã hoàn tất tự động kiểm tra! Tổng số bộ truyện được cập nhật chap mới: {}", synced);
+            int mangadexSynced = mangadexImportService.syncMangadexLatestUpdates("AUTO_SCHEDULED");
+            log.info("✅ [Scheduler MangaDex] Hoàn tất quét MangaDex! Cập nhật {} bộ truyện.", mangadexSynced);
         } catch (Exception e) {
-            log.error("[Scheduler Task] Lỗi khi tự động đồng bộ chap mới: {}", e.getMessage());
+            log.error("❌ [Scheduler MangaDex] Lỗi đồng bộ MangaDex: {}", e.getMessage());
         }
     }
 }

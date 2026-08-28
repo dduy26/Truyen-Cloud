@@ -144,21 +144,16 @@ export default function App() {
       return DEFAULT_COVER_IMAGE;
     }
     let res = url.trim();
-    // Normalize any otruyenapi domain variations to img.otruyenapi.com
-    res = res.replace(/https?:\/\/(img\.)*otruyenapi\.com/g, 'https://img.otruyenapi.com');
     if (!res.startsWith('http://') && !res.startsWith('https://')) {
-      res = `https://img.otruyenapi.com/uploads/comics/${res.replace(/^\/+/, '')}`;
+      return DEFAULT_COVER_IMAGE;
+    }
+    if (res.includes('mangadex.org') || res.includes('uploads.mangadex.org')) {
+      return `/api/v1/proxy-image?url=${encodeURIComponent(res)}`;
     }
     return res;
   };
 
   const getStoryPosterUrl = (storySlug, fallbackUrl) => {
-    const slugLower = (storySlug || '').toLowerCase();
-    if (slugLower.includes('solo-leveling')) return 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&auto=format&fit=crop&q=80';
-    if (slugLower.includes('one-piece') || slugLower.includes('vua-hai-tac')) return 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400&auto=format&fit=crop&q=80';
-    if (slugLower.includes('dragon-ball') || slugLower.includes('bay-vien-ngoc')) return 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80';
-    if (slugLower.includes('naruto')) return 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80';
-
     const matched = Array.isArray(stories) ? stories.find(s => s.slug === storySlug || s.id === storySlug || (s.slug && storySlug && s.slug.includes(storySlug))) : null;
     if (matched && matched.thumbUrl) {
       return sanitizeThumbUrl(matched.thumbUrl);
@@ -615,8 +610,8 @@ export default function App() {
       }
       const saved = localStorage.getItem('mangacloud_history');
       return saved ? JSON.parse(saved) : [
-        { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/solo-leveling-thumb.jpg', readAt: new Date(Date.now() - 3600000).toISOString() },
-        { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://img.otruyenapi.com/uploads/comics/one-piece-thumb.jpg', readAt: new Date(Date.now() - 86400000).toISOString() }
+        { storySlug: 'solo-leveling', storyName: 'Solo Leveling', chapterNum: '179', thumbUrl: 'https://uploads.mangadex.org/covers/32d76d19-8a05-4db0-9fc2-e0b0648fe9d0/b77d61c6-1c88-4680-a6ff-e722bf72cf19.jpg', readAt: new Date(Date.now() - 3600000).toISOString() },
+        { storySlug: 'one-piece', storyName: 'One Piece', chapterNum: '1110', thumbUrl: 'https://uploads.mangadex.org/covers/a1c5d8fb-722a-4573-9f8b-da9f050d3757/8ec56453-2736-47bd-b2ea-9e7f7808269d.jpg', readAt: new Date(Date.now() - 86400000).toISOString() }
       ];
     } catch (e) { return []; }
   });
@@ -756,6 +751,15 @@ export default function App() {
       }
 
       let chData = await api.getChapterDetail(slug, chNum).catch(() => null);
+
+      if (chData) {
+        if (Array.isArray(chData.imageUrls)) {
+          chData.imageUrls = chData.imageUrls.map(u => (u && (u.includes('mangadex.org') || u.includes('uploads.mangadex.org'))) ? `/api/v1/proxy-image?url=${encodeURIComponent(u)}` : u);
+        }
+        if (Array.isArray(chData.pages)) {
+          chData.pages = chData.pages.map(u => (u && (u.includes('mangadex.org') || u.includes('uploads.mangadex.org'))) ? `/api/v1/proxy-image?url=${encodeURIComponent(u)}` : u);
+        }
+      }
 
       if (!chData || ((!Array.isArray(chData.imageUrls) || chData.imageUrls.length === 0) && (!Array.isArray(chData.pages) || chData.pages.length === 0))) {
         chData = {
@@ -3491,16 +3495,61 @@ export default function App() {
                 </div>
               ) : (
                 (() => {
-                  const pagesList = (chapterDetail?.imageUrls && chapterDetail.imageUrls.length > 0)
+                  const rawPages = (chapterDetail?.imageUrls && chapterDetail.imageUrls.length > 0)
                     ? chapterDetail.imageUrls
                     : (chapterDetail?.pages && chapterDetail.pages.length > 0)
                       ? chapterDetail.pages
-                      : [
-                        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1000&auto=format&fit=crop&q=80',
-                        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1000&auto=format&fit=crop&q=80'
-                      ];
+                      : [];
+
+                  const pagesList = rawPages.filter(Boolean);
+
+                  if (pagesList.length === 0) {
+                    return (
+                      <div className="chapter-error-card" style={{
+                        padding: '50px 24px',
+                        textAlign: 'center',
+                        maxWidth: '640px',
+                        margin: '40px auto',
+                        background: 'rgba(25, 27, 44, 0.95)',
+                        border: '1px solid rgba(255, 107, 107, 0.3)',
+                        borderRadius: '20px',
+                        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6)',
+                        color: '#fff',
+                        backdropFilter: 'blur(10px)'
+                      }}>
+                        <div style={{ fontSize: '56px', marginBottom: '16px' }}>⚡</div>
+                        <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#ff6b6b', marginBottom: '12px' }}>
+                          Không thể tải trang ảnh của Chapter {selectedChapter || '1'}
+                        </h3>
+                        <p style={{ color: '#c0c5e0', fontSize: '14.5px', lineHeight: '1.6', marginBottom: '24px' }}>
+                          Máy chủ nguồn <strong>MangaDex Global CDN</strong> hiện đang phản hồi chậm hoặc chưa sẵn sàng trang ảnh.
+                          Vui lòng bấm thử lại hoặc chọn bộ truyện MangaDex khác.
+                        </p>
+                        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: '600', borderRadius: '10px', cursor: 'pointer' }}
+                            onClick={() => {
+                              const slug = routePath.replace('/read/', '').split('/')[0];
+                              loadChapterContentAndComments(slug, selectedChapter || '1');
+                            }}
+                          >
+                            🔄 Thử lại ngay
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: '600', borderRadius: '10px', cursor: 'pointer' }}
+                            onClick={() => {
+                              const slug = routePath.replace('/read/', '').split('/')[0];
+                              navigate(`/read/${slug}/${Number(selectedChapter || 1) + 1}`);
+                            }}
+                          >
+                            ⏭️ Xem Tập Sau ›
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return pagesList.map((imgUrl, idx) => (
                     <img

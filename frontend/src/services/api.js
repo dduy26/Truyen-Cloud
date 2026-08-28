@@ -173,11 +173,13 @@ export const api = {
     method: 'DELETE',
   }),
 
-  // Otruyen Auto Importer & Crawler APIs
+  // MangaDex & Auto Importer APIs
   searchOtruyenStories: (query) => request(`/admin/import-otruyen/search?q=${encodeURIComponent(query)}`).catch(() => []),
   importOtruyenBySlug: (slug) => request(`/admin/import-otruyen/${slug}`, { method: 'POST' }),
   searchMangadexStories: (query) => request(`/admin/import-otruyen/mangadex/search?q=${encodeURIComponent(query)}`).catch(() => []),
   importMangadexById: (id) => request(`/admin/import-otruyen/mangadex/${id}`, { method: 'POST' }),
+  importBatchMangadexStories: (limit = 30) => request(`/admin/import-otruyen/mangadex/batch?limit=${limit}`, { method: 'POST' }),
+  clearOtruyenStories: () => request('/admin/import-otruyen/clear-otruyen-stories', { method: 'DELETE' }),
 
   importBatchOtruyenStories: (startPage = 1, endPage = 5) => request(`/admin/import-otruyen/batch?startPage=${startPage}&endPage=${endPage}`, {
     method: 'POST',

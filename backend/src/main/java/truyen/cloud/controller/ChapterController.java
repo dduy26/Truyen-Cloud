@@ -25,14 +25,14 @@ public class ChapterController {
     }
 
     // 2. Lấy danh sách tất cả chapter của 1 bộ truyện theo slug
-    @GetMapping("/story/{storySlug}")
+    @GetMapping({"/story/{storySlug}", "/{storySlug}"})
     public ResponseEntity<List<ChapterResponse>> getChaptersByStorySlug(@PathVariable String storySlug) {
         List<ChapterResponse> response = chapterService.getChaptersByStorySlug(storySlug);
         return ResponseEntity.ok(response);
     }
 
-    // 3. Lấy chi tiết 1 chapter cụ thể để đọc (VD: /api/v1/chapters/story/dao-hai-tac/1000)
-    @GetMapping("/story/{storySlug}/{chapterName}")
+    // 3. Lấy chi tiết 1 chapter cụ thể để đọc (Hỗ trợ cả /story/{slug}/{ch} và /{slug}/{ch})
+    @GetMapping({"/story/{storySlug}/{chapterName}", "/{storySlug}/{chapterName}"})
     public ResponseEntity<ChapterResponse> getChapterDetail(
             @PathVariable String storySlug,
             @PathVariable String chapterName) {

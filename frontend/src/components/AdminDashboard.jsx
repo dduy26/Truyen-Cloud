@@ -3,6 +3,23 @@ import api from '../services/api';
 
 const DEFAULT_COVER_IMAGE = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80';
 
+const sanitizeThumbUrl = (url) => {
+  if (!url || typeof url !== 'string' || url.trim() === '' || url.startsWith('blob:')) {
+    return DEFAULT_COVER_IMAGE;
+  }
+  let res = url.trim();
+  if (!res.startsWith('http://') && !res.startsWith('https://') && !res.startsWith('/api/')) {
+    return DEFAULT_COVER_IMAGE;
+  }
+  if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=')) {
+    return res;
+  }
+  if (res.includes('uploads.mangadex.org') || res.includes('mangadex.org')) {
+    return `/api/v1/proxy-image?url=${encodeURIComponent(res)}`;
+  }
+  return res;
+};
+
 const IconDashboard = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
     <rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" />
@@ -1107,7 +1124,7 @@ export default function AdminDashboard({
                         {/* Fixed Constrained Cover Thumbnail */}
                         <td>
                           <img
-                            src={story.thumbUrl || DEFAULT_COVER_IMAGE}
+                            src={sanitizeThumbUrl(story.thumbUrl)}
                             alt={story.name || 'Manga'}
                             referrerPolicy="no-referrer"
                             className="admin-table-cover"
@@ -2052,7 +2069,7 @@ export default function AdminDashboard({
                                 title="Bấm để kiểm tra danh sách Chapter"
                               >
                                 <img
-                                  src={item.thumbUrl || DEFAULT_COVER_IMAGE}
+                                  src={sanitizeThumbUrl(item.thumbUrl)}
                                   alt={item.name}
                                   style={{ width: '32px', height: '44px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--accent-pink)', flexShrink: 0 }}
                                   onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
@@ -2133,7 +2150,7 @@ export default function AdminDashboard({
                     }}
                   >
                     <img
-                      src={item.thumbUrl || DEFAULT_COVER_IMAGE}
+                      src={sanitizeThumbUrl(item.thumbUrl)}
                       alt={item.name}
                       style={{ width: '42px', height: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #8b5cf6' }}
                       onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}

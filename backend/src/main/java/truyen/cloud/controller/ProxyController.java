@@ -7,7 +7,7 @@ import org.springframework.web.client.RestTemplate;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/proxy-image")
+@RequestMapping({"/api/v1/proxy-image", "/api/proxy/image"})
 public class ProxyController {
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -21,8 +21,8 @@ public class ProxyController {
         String targetUrl = imageUrl.trim();
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            headers.set("Referer", "https://mangadex.org/");
+            headers.set("User-Agent", "TruyenCloud/1.0 (contact@truyencloud.com)");
+            headers.set("Referer", "https://mangadex.org");
             headers.set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 

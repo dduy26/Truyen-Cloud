@@ -83,19 +83,19 @@ export default function App() {
   const transformImageUrl = (rawUrl, server) => {
     if (!rawUrl || typeof rawUrl !== 'string') return '';
     let url = rawUrl.trim();
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/api/')) {
       url = `https://uploads.mangadex.org/data/${url}`;
     }
     url = url.replace(/https:\/\/[a-zA-Z0-9.-]+\.mangadex\.network/, 'https://uploads.mangadex.org');
 
-    if (server === 'serverVip') {
-      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&default=${encodeURIComponent(url)}`;
-    } else if (server === 'serverProxy') {
-      return `/api/v1/proxy-image?url=${encodeURIComponent(url)}`;
-    } else if (server === 'serverDataSaver') {
-      return url.replace('/data/', '/data-saver/');
+    if (url.includes('/api/v1/proxy-image?url=') || url.includes('/api/proxy/image?url=')) {
+      return url;
     }
-    return url;
+
+    if (server === 'serverDataSaver') {
+      return `/api/v1/proxy-image?url=${encodeURIComponent(url.replace('/data/', '/data-saver/'))}`;
+    }
+    return `/api/v1/proxy-image?url=${encodeURIComponent(url)}`;
   };
 
   const handleReportBrokenChapter = () => {
@@ -176,8 +176,16 @@ export default function App() {
       return DEFAULT_COVER_IMAGE;
     }
     let res = url.trim();
-    if (!res.startsWith('http://') && !res.startsWith('https://')) {
+    if (!res.startsWith('http://') && !res.startsWith('https://') && !res.startsWith('/api/')) {
       return DEFAULT_COVER_IMAGE;
+    }
+    // Prevent double proxying
+    if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=')) {
+      return res;
+    }
+    // Route MangaDex covers through Backend Proxy (with proper MangaDex Referer)
+    if (res.includes('uploads.mangadex.org') || res.includes('mangadex.org')) {
+      return `/api/v1/proxy-image?url=${encodeURIComponent(res)}`;
     }
     return res;
   };

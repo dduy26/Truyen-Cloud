@@ -144,9 +144,9 @@ public class ChapterServiceImpl implements ChapterService {
             }
         }
 
-        // On-demand fetch/repair if pages array is empty OR contains relative filenames missing http/https
+        // On-demand fetch/repair if pages array is empty OR contains relative filenames missing http/https or containing spaces/old domains
         boolean hasInvalidUrls = chapter.getPages() == null || chapter.getPages().isEmpty() ||
-                chapter.getPages().stream().anyMatch(url -> url == null || (!url.startsWith("http://") && !url.startsWith("https://")));
+                chapter.getPages().stream().anyMatch(url -> url == null || (!url.startsWith("http://") && !url.startsWith("https://")) || url.contains(" ") || url.contains(".mangadex.network"));
 
         if (hasInvalidUrls && chapter.getChapterApiUrl() != null && !chapter.getChapterApiUrl().isEmpty()) {
             try {

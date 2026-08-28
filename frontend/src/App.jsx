@@ -77,6 +77,38 @@ export default function App() {
   const [selectedStory, setSelectedStory] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
 
+  // Image Server State ('server1' | 'serverVip' | 'serverProxy' | 'serverDataSaver')
+  const [imageServer, setImageServer] = useState(() => localStorage.getItem('mangacloud_image_server') || 'server1');
+
+  const transformImageUrl = (rawUrl, server) => {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    let url = rawUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = `https://uploads.mangadex.org/data/${url}`;
+    }
+    url = url.replace(/https:\/\/[a-zA-Z0-9.-]+\.mangadex\.network/, 'https://uploads.mangadex.org');
+
+    if (server === 'serverVip') {
+      return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&default=${encodeURIComponent(url)}`;
+    } else if (server === 'serverProxy') {
+      return `/api/v1/proxy-image?url=${encodeURIComponent(url)}`;
+    } else if (server === 'serverDataSaver') {
+      return url.replace('/data/', '/data-saver/');
+    }
+    return url;
+  };
+
+  const handleReportBrokenChapter = () => {
+    showToast('⚠️ Đã tiếp nhận báo lỗi chương! Hệ thống tự động chuyển sang Server VIP & Proxy cứu hộ.', 'success');
+    if (imageServer === 'server1') {
+      setImageServer('serverVip');
+      localStorage.setItem('mangacloud_image_server', 'serverVip');
+    } else if (imageServer === 'serverVip') {
+      setImageServer('serverProxy');
+      localStorage.setItem('mangacloud_image_server', 'serverProxy');
+    }
+  };
+
   // Admin View State
   const [adminActiveNav, setAdminActiveNav] = useState('Dashboard');
 
@@ -3480,6 +3512,68 @@ export default function App() {
               </div>
             </header>
 
+            {/* SERVER IMAGE SWITCHER TOOLBAR (Ổ Truyện Style) */}
+            <div className="reader-server-toolbar">
+              <div className="server-notice-row">
+                <span className="server-notice-text">
+                  Nếu không xem được truyện vui lòng đổi <strong>"SERVER HÌNH"</strong> bên dưới
+                </span>
+              </div>
+              <div className="server-action-row">
+                <div className="server-buttons-group">
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'server1' ? 'active-s1' : ''}`}
+                    onClick={() => {
+                      setImageServer('server1');
+                      localStorage.setItem('mangacloud_image_server', 'server1');
+                      showToast('🟢 Đã chuyển sang Server 1 (MangaDex Gốc)', 'info');
+                    }}
+                  >
+                    Server 1
+                  </button>
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'serverVip' ? 'active-svip' : ''}`}
+                    onClick={() => {
+                      setImageServer('serverVip');
+                      localStorage.setItem('mangacloud_image_server', 'serverVip');
+                      showToast('⚡ Đã chuyển sang Server VIP (Cloudflare WebP Tốc độ cao)', 'info');
+                    }}
+                  >
+                    Server VIP
+                  </button>
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'serverProxy' ? 'active-s2' : ''}`}
+                    onClick={() => {
+                      setImageServer('serverProxy');
+                      localStorage.setItem('mangacloud_image_server', 'serverProxy');
+                      showToast('🛡️ Đã chuyển sang Server 2 (Proxy Cứu Hộ)', 'info');
+                    }}
+                  >
+                    Server 2
+                  </button>
+                  <button
+                    type="button"
+                    className={`server-btn-item ${imageServer === 'serverDataSaver' ? 'active-s3' : ''}`}
+                    onClick={() => {
+                      setImageServer('serverDataSaver');
+                      localStorage.setItem('mangacloud_image_server', 'serverDataSaver');
+                      showToast('🚀 Đã chuyển sang Server 3 (Tiết Kiệm Dung Lượng)', 'info');
+                    }}
+                  >
+                    Server 3
+                  </button>
+                </div>
+                <div className="server-report-box">
+                  <button type="button" className="btn-report-chapter-broken" onClick={handleReportBrokenChapter}>
+                    ⚠️ Báo Lỗi Chương
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* WEBTOON IMAGE CANVAS */}
             <main className="webtoon-canvas">
               {chapterLoading ? (
@@ -3531,7 +3625,7 @@ export default function App() {
                         </h3>
                         <p style={{ color: '#c0c5e0', fontSize: '14.5px', lineHeight: '1.6', marginBottom: '24px' }}>
                           Máy chủ nguồn <strong>MangaDex Global CDN</strong> hiện đang phản hồi chậm hoặc chưa sẵn sàng trang ảnh.
-                          Vui lòng bấm thử lại hoặc chọn bộ truyện MangaDex khác.
+                          Vui lòng bấm đổi <strong>Server VIP</strong> hoặc bấm thử lại bên dưới.
                         </p>
                         <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
                           <button
@@ -3543,6 +3637,17 @@ export default function App() {
                             }}
                           >
                             🔄 Thử lại ngay
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            style={{ padding: '12px 24px', fontSize: '14px', fontWeight: '600', borderRadius: '10px', cursor: 'pointer' }}
+                            onClick={() => {
+                              setImageServer('serverVip');
+                              localStorage.setItem('mangacloud_image_server', 'serverVip');
+                              showToast('⚡ Đã chuyển sang Server VIP!', 'success');
+                            }}
+                          >
+                            ⚡ Thử Server VIP
                           </button>
                           <button
                             className="btn-secondary"
@@ -3561,15 +3666,25 @@ export default function App() {
 
                   return pagesList.map((imgUrl, idx) => (
                     <img
-                      key={idx}
-                      src={imgUrl}
+                      key={`${idx}-${imageServer}`}
+                      src={transformImageUrl(imgUrl, imageServer)}
                       alt={`Trang ${idx + 1}`}
                       referrerPolicy="no-referrer"
                       className="webtoon-page-img"
-                      loading="lazy"
+                      loading={idx < 4 ? 'eager' : 'lazy'}
                       onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.style.display = 'none';
+                        // Auto-fallback sequence on 404 / connection error:
+                        const curr = e.currentTarget.src || '';
+                        if (!curr.includes('wsrv.nl') && !curr.includes('/api/v1/proxy-image')) {
+                          // Fallback to Server VIP
+                          e.currentTarget.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=webp&default=${encodeURIComponent(imgUrl)}`;
+                        } else if (!curr.includes('/api/v1/proxy-image')) {
+                          // Fallback to Server 2 Proxy
+                          e.currentTarget.src = `/api/v1/proxy-image?url=${encodeURIComponent(imgUrl)}`;
+                        } else {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.style.display = 'none';
+                        }
                       }}
                     />
                   ));

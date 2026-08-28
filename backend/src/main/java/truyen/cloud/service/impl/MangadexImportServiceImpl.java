@@ -191,69 +191,65 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         }
         if (categories.isEmpty()) categories.add("Manga");
 
-        // 2. Fetch ALL Chapters feed with offset pagination (Strictly filter English 'en' and Vietnamese 'vi')
-        Map<String, JsonNode> chapterMap = new LinkedHashMap<>();
-        int feedOffset = 0;
-        boolean hasMoreFeed = true;
+        // 2. Fetch ALL Chapters across ALL languages (Aggregate master list + Multi-language Feed)
+        Map<String, ChapterMeta> chapterMap = new LinkedHashMap<>();
 
-        while (hasMoreFeed && feedOffset < 2500) {
-            String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage[]=en&translatedLanguage[]=vi&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[chapter]=asc&limit=500&offset=" + feedOffset;
-            String jsonFeed = fetchJson(feedUrl);
-
-            if (jsonFeed == null && feedOffset == 0) {
-                String fallbackFeedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[chapter]=asc&limit=500&offset=0";
-                jsonFeed = fetchJson(fallbackFeedUrl);
-            }
-
-            if (jsonFeed == null) break;
-
-            try {
-                JsonNode feedRoot = objectMapper.readTree(jsonFeed);
-                JsonNode feedData = feedRoot.path("data");
-                if (!feedData.isArray() || feedData.isEmpty()) {
-                    hasMoreFeed = false;
-                    break;
-                }
-
-                for (JsonNode chItem : feedData) {
-                    JsonNode chAttrs = chItem.path("attributes");
-                    String chNum = chAttrs.path("chapter").asText("");
-                    JsonNode extNode = chAttrs.path("externalUrl");
-                    boolean hasExt = !extNode.isMissingNode() && !extNode.isNull() && !extNode.asText("").trim().isEmpty() && !"null".equalsIgnoreCase(extNode.asText("").trim());
-                    int pageCount = chAttrs.path("pages").asInt(0);
-
-                    // Skip external redirect links and 0-page placeholders
-                    if (hasExt || pageCount == 0 || chNum.isEmpty()) continue;
-
-                    // Deduplicate: Keep ONLY the first valid scanlation group for each chapter number ("1", "2", ... "23", "24")
-                    if (!chapterMap.containsKey(chNum)) {
-                        chapterMap.put(chNum, chItem);
+        // Step 2.1: Master Aggregate (Instantly retrieves 100% of all distinct chapter IDs across all languages)
+        try {
+            String aggregateUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/aggregate";
+            String jsonAgg = fetchJson(aggregateUrl);
+            if (jsonAgg != null) {
+                JsonNode aggRoot = objectMapper.readTree(jsonAgg);
+                JsonNode volumesNode = aggRoot.path("volumes");
+                if (volumesNode.isObject()) {
+                    Iterator<String> volKeys = volumesNode.fieldNames();
+                    while (volKeys.hasNext()) {
+                        String volKey = volKeys.next();
+                        JsonNode chsNode = volumesNode.path(volKey).path("chapters");
+                        if (chsNode.isObject()) {
+                            Iterator<String> chKeys = chsNode.fieldNames();
+                            while (chKeys.hasNext()) {
+                                String chKey = chKeys.next();
+                                JsonNode chObj = chsNode.path(chKey);
+                                String chId = chObj.path("id").asText("");
+                                String chNum = chObj.path("chapter").asText(chKey);
+                                if (!chId.isEmpty() && !chNum.isEmpty()) {
+                                    chapterMap.put(chNum, new ChapterMeta(chId, chNum, "Chapter " + chNum, "other"));
+                                }
+                            }
+                        }
                     }
                 }
-
-                if (feedData.size() < 500) {
-                    hasMoreFeed = false;
-                } else {
-                    feedOffset += 500;
-                }
-            } catch (Exception e) {
-                log.error("Lỗi parse feed offset {}: {}", feedOffset, e.getMessage());
-                break;
             }
+        } catch (Exception e) {
+            log.warn("Lỗi đọc aggregate MangaDex {}: {}", mangadexId, e.getMessage());
         }
+
+        // Step 2.2: Fetch multi-language feeds to enrich titles & prioritize vi / en scanlations
+        fetchFeedPages(mangadexId, chapterMap, true);
+        fetchFeedPages(mangadexId, chapterMap, false);
+
+        // Sort chapters numerically (0, 1, 2, ... 10, ... 100, 101, etc.)
+        List<Map.Entry<String, ChapterMeta>> sortedChapters = new ArrayList<>(chapterMap.entrySet());
+        sortedChapters.sort((a, b) -> {
+            try {
+                double numA = Double.parseDouble(a.getKey().replaceAll("[^0-9.]", ""));
+                double numB = Double.parseDouble(b.getKey().replaceAll("[^0-9.]", ""));
+                return Double.compare(numA, numB);
+            } catch (Exception e) {
+                return a.getKey().compareTo(b.getKey());
+            }
+        });
 
         List<Chapter> chaptersToSave = new ArrayList<>();
         String latestChName = "Ch. 1";
         double maxChNum = -1.0;
 
-        for (Map.Entry<String, JsonNode> entry : chapterMap.entrySet()) {
+        for (Map.Entry<String, ChapterMeta> entry : sortedChapters) {
             String chNum = entry.getKey();
-            JsonNode chItem = entry.getValue();
-            String chId = chItem.path("id").asText();
-            JsonNode chAttrs = chItem.path("attributes");
-
-            String chTitle = chAttrs.path("title").asText("");
-            if (chTitle.isEmpty()) chTitle = "Chapter " + chNum;
+            ChapterMeta meta = entry.getValue();
+            String chId = meta.id;
+            String chTitle = meta.title != null && !meta.title.isEmpty() ? meta.title : ("Chapter " + chNum);
 
             String chapterApiUrl = MANGADEX_API_BASE + "at-home/server/" + chId;
             List<String> imageUrls = new ArrayList<>();
@@ -306,7 +302,7 @@ public class MangadexImportServiceImpl implements MangadexImportService {
             chaptersToSave.add(chapterEntity);
 
             try {
-                double parsed = Double.parseDouble(chNum);
+                double parsed = Double.parseDouble(chNum.replaceAll("[^0-9.]", ""));
                 if (parsed >= maxChNum) {
                     maxChNum = parsed;
                     latestChName = "Ch. " + chNum;
@@ -341,7 +337,7 @@ public class MangadexImportServiceImpl implements MangadexImportService {
 
         clearCaches();
 
-        log.info("✅ [MangaDex] Đã import thành công truyện '{}' với {} chapters.", name, chaptersToSave.size());
+        log.info("✅ [MangaDex] Đã import thành công truyện '{}' với {} chapters đầy đủ.", name, chaptersToSave.size());
         return storyEntity;
     }
 
@@ -516,6 +512,88 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         }
     }
 
+    private static class ChapterMeta {
+        String id;
+        String chapterNum;
+        String title;
+        String lang;
+
+        ChapterMeta(String id, String chapterNum, String title, String lang) {
+            this.id = id;
+            this.chapterNum = chapterNum;
+            this.title = title;
+            this.lang = lang;
+        }
+    }
+
+    private void fetchFeedPages(String mangadexId, Map<String, ChapterMeta> chapterMap, boolean filterLang) {
+        int feedOffset = 0;
+        boolean hasMoreFeed = true;
+
+        while (hasMoreFeed && feedOffset < 5000) {
+            String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[chapter]=asc&limit=500&offset=" + feedOffset;
+            if (filterLang) {
+                feedUrl += "&translatedLanguage[]=vi&translatedLanguage[]=en";
+            }
+            String jsonFeed = fetchJson(feedUrl);
+            if (jsonFeed == null) break;
+
+            try {
+                JsonNode feedRoot = objectMapper.readTree(jsonFeed);
+                JsonNode feedData = feedRoot.path("data");
+                if (!feedData.isArray() || feedData.isEmpty()) {
+                    hasMoreFeed = false;
+                    break;
+                }
+
+                for (JsonNode chItem : feedData) {
+                    String chId = chItem.path("id").asText("");
+                    JsonNode chAttrs = chItem.path("attributes");
+                    String chNum = chAttrs.path("chapter").asText("");
+                    String chLang = chAttrs.path("translatedLanguage").asText("other");
+                    String chTitle = chAttrs.path("title").asText("");
+                    if (chTitle.isEmpty()) {
+                        chTitle = "Chapter " + chNum;
+                    }
+
+                    JsonNode extNode = chAttrs.path("externalUrl");
+                    boolean hasExt = !extNode.isMissingNode() && !extNode.isNull() && !extNode.asText("").trim().isEmpty() && !"null".equalsIgnoreCase(extNode.asText("").trim());
+                    int pageCount = chAttrs.path("pages").asInt(0);
+
+                    if (hasExt || pageCount == 0 || chNum.isEmpty() || chId.isEmpty()) continue;
+
+                    ChapterMeta existing = chapterMap.get(chNum);
+                    if (existing == null) {
+                        chapterMap.put(chNum, new ChapterMeta(chId, chNum, chTitle, chLang));
+                    } else {
+                        // Priority ranking: 'vi' > 'en' > others
+                        boolean shouldOverride = false;
+                        if ("vi".equalsIgnoreCase(chLang)) {
+                            shouldOverride = true;
+                        } else if ("en".equalsIgnoreCase(chLang) && !"vi".equalsIgnoreCase(existing.lang)) {
+                            shouldOverride = true;
+                        }
+
+                        if (shouldOverride) {
+                            existing.id = chId;
+                            existing.title = chTitle;
+                            existing.lang = chLang;
+                        }
+                    }
+                }
+
+                if (feedData.size() < 500) {
+                    hasMoreFeed = false;
+                } else {
+                    feedOffset += 500;
+                }
+            } catch (Exception e) {
+                log.error("Lỗi parse feed offset {}: {}", feedOffset, e.getMessage());
+                break;
+            }
+        }
+    }
+
     private void clearCaches() {
         try {
             if (cacheManager != null) {
@@ -529,3 +607,4 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         } catch (Exception ignored) {}
     }
 }
+

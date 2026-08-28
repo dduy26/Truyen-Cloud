@@ -191,32 +191,31 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         }
         if (categories.isEmpty()) categories.add("Manga");
 
-        // 2. Fetch Chapters feed (Prefer English 'en' and Vietnamese 'vi')
-        String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage%5B%5D=en&translatedLanguage%5B%5D=vi&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&order%5Bchapter%5D=asc&limit=500";
-        String jsonFeed = fetchJson(feedUrl);
-        if (jsonFeed != null) {
+        // 2. Fetch ALL Chapters feed with offset pagination (Strictly filter English 'en' and Vietnamese 'vi')
+        Map<String, JsonNode> chapterMap = new LinkedHashMap<>();
+        int feedOffset = 0;
+        boolean hasMoreFeed = true;
+
+        while (hasMoreFeed && feedOffset < 2500) {
+            String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage[]=en&translatedLanguage[]=vi&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[chapter]=asc&limit=500&offset=" + feedOffset;
+            String jsonFeed = fetchJson(feedUrl);
+
+            if (jsonFeed == null && feedOffset == 0) {
+                String fallbackFeedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage[]=en&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[chapter]=asc&limit=500&offset=0";
+                jsonFeed = fetchJson(fallbackFeedUrl);
+            }
+
+            if (jsonFeed == null) break;
+
             try {
-                JsonNode testRoot = objectMapper.readTree(jsonFeed);
-                if (!testRoot.path("data").isArray() || testRoot.path("data").isEmpty()) {
-                    String fallbackFeedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&order%5Bchapter%5D=asc&limit=500";
-                    String fallbackJson = fetchJson(fallbackFeedUrl);
-                    if (fallbackJson != null) jsonFeed = fallbackJson;
+                JsonNode feedRoot = objectMapper.readTree(jsonFeed);
+                JsonNode feedData = feedRoot.path("data");
+                if (!feedData.isArray() || feedData.isEmpty()) {
+                    hasMoreFeed = false;
+                    break;
                 }
-            } catch (Exception ignored) {}
-        }
-        List<Chapter> chaptersToSave = new ArrayList<>();
-        String latestChName = "Ch. 1";
 
-        if (jsonFeed != null) {
-            JsonNode feedRoot = objectMapper.readTree(jsonFeed);
-            JsonNode feedData = feedRoot.path("data");
-            if (feedData.isArray()) {
-                Set<String> seenCh = new HashSet<>();
-                int processedChapters = 0;
-
-                log.info("MangaDex Feed for manga {} returned {} items", mangadexId, feedData.size());
                 for (JsonNode chItem : feedData) {
-                    String chId = chItem.path("id").asText();
                     JsonNode chAttrs = chItem.path("attributes");
                     String chNum = chAttrs.path("chapter").asText("");
                     JsonNode extNode = chAttrs.path("externalUrl");
@@ -224,69 +223,95 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                     int pageCount = chAttrs.path("pages").asInt(0);
 
                     // Skip external redirect links and 0-page placeholders
-                    if (hasExt || pageCount == 0) continue;
-                    if (chNum.isEmpty()) continue;
-                    if (seenCh.contains(chNum)) continue;
-                    seenCh.add(chNum);
+                    if (hasExt || pageCount == 0 || chNum.isEmpty()) continue;
 
-                    String chTitle = chAttrs.path("title").asText("");
-                    if (chTitle.isEmpty()) chTitle = "Chapter " + chNum;
+                    // Deduplicate: Keep ONLY the first valid scanlation group for each chapter number ("1", "2", ... "23", "24")
+                    if (!chapterMap.containsKey(chNum)) {
+                        chapterMap.put(chNum, chItem);
+                    }
+                }
 
-                    // Fetch chapter image filenames directly via MangaDex At-Home CDN
-                    List<String> imageUrls = new ArrayList<>();
-                    String chapterApiUrl = MANGADEX_API_BASE + "at-home/server/" + chId;
+                if (feedData.size() < 500) {
+                    hasMoreFeed = false;
+                } else {
+                    feedOffset += 500;
+                }
+            } catch (Exception e) {
+                log.error("Lỗi parse feed offset {}: {}", feedOffset, e.getMessage());
+                break;
+            }
+        }
 
-                    try {
-                        try {
-                            Thread.sleep(350);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
+        List<Chapter> chaptersToSave = new ArrayList<>();
+        String latestChName = "Ch. 1";
+        double maxChNum = -1.0;
+
+        for (Map.Entry<String, JsonNode> entry : chapterMap.entrySet()) {
+            String chNum = entry.getKey();
+            JsonNode chItem = entry.getValue();
+            String chId = chItem.path("id").asText();
+            JsonNode chAttrs = chItem.path("attributes");
+
+            String chTitle = chAttrs.path("title").asText("");
+            if (chTitle.isEmpty()) chTitle = "Chapter " + chNum;
+
+            String chapterApiUrl = MANGADEX_API_BASE + "at-home/server/" + chId;
+            List<String> imageUrls = new ArrayList<>();
+
+            // Pre-fetch image URLs for the first 2 chapters during import to prevent MangaDex 429 rate limit.
+            // All other chapters are auto-repaired on-demand in <300ms when opened by reader in ChapterServiceImpl!
+            if (chaptersToSave.size() < 2) {
+                try {
+                    String jsonAtHome = fetchJson(chapterApiUrl);
+                    if (jsonAtHome != null) {
+                        JsonNode homeRoot = objectMapper.readTree(jsonAtHome);
+                        String hash = homeRoot.path("chapter").path("hash").asText("");
+                        JsonNode pageFiles = homeRoot.path("chapter").path("data");
+                        boolean isDataSaver = false;
+                        if (!pageFiles.isArray() || pageFiles.isEmpty()) {
+                            pageFiles = homeRoot.path("chapter").path("dataSaver");
+                            isDataSaver = true;
                         }
 
-                        String jsonAtHome = fetchJson(chapterApiUrl);
-                        if (jsonAtHome != null) {
-                            JsonNode homeRoot = objectMapper.readTree(jsonAtHome);
-                            String baseUrl = homeRoot.path("baseUrl").asText("");
-                            String hash = homeRoot.path("chapter").path("hash").asText("");
-                            JsonNode pageFiles = homeRoot.path("chapter").path("data");
-                            boolean isDataSaver = false;
-                            if (!pageFiles.isArray() || pageFiles.isEmpty()) {
-                                pageFiles = homeRoot.path("chapter").path("dataSaver");
-                                isDataSaver = true;
-                            }
-
-                            if (pageFiles.isArray() && !hash.isEmpty()) {
-                                String serverPrefix = "https://uploads.mangadex.org";
-                                String pathPrefix = isDataSaver ? "/data-saver/" : "/data/";
-                                for (JsonNode pageFile : pageFiles) {
-                                    String fileName = pageFile.asText("");
-                                    if (!fileName.isEmpty()) {
-                                        imageUrls.add(serverPrefix + pathPrefix + hash + "/" + fileName);
-                                    }
+                        if (pageFiles.isArray() && !hash.isEmpty()) {
+                            String serverPrefix = "https://uploads.mangadex.org";
+                            String pathPrefix = isDataSaver ? "/data-saver/" : "/data/";
+                            for (JsonNode pageFile : pageFiles) {
+                                String fileName = pageFile.asText("");
+                                if (!fileName.isEmpty()) {
+                                    imageUrls.add(serverPrefix + pathPrefix + hash + "/" + fileName);
                                 }
                             }
                         }
-                    } catch (Exception e) {
-                        log.warn("Không thể lấy trang ảnh cho MangaDex chapter {} (ID: {}): {}", chNum, chId, e.getMessage());
                     }
-
-                    Optional<Chapter> existingCh = chapterRepository.findByStorySlugAndChapterName(slug, chNum);
-                    Chapter chapterEntity = existingCh.orElseGet(() -> Chapter.builder()
-                            .storySlug(slug)
-                            .chapterName(chNum)
-                            .updatedAt(LocalDateTime.now())
-                            .build());
-
-                    chapterEntity.setChapterTitle(chTitle);
-                    chapterEntity.setChapterApiUrl(chapterApiUrl);
-                    chapterEntity.setImageUrls(imageUrls);
-                    chapterEntity.setPages(imageUrls);
-                    chapterEntity.setUpdatedAt(LocalDateTime.now());
-                    chaptersToSave.add(chapterEntity);
-                    latestChName = "Ch. " + chNum;
-                    processedChapters++;
+                } catch (Exception e) {
+                    log.warn("Không thể pre-fetch trang ảnh cho chapter {}: {}", chNum, e.getMessage());
                 }
             }
+
+            Optional<Chapter> existingCh = chapterRepository.findByStorySlugAndChapterName(slug, chNum);
+            Chapter chapterEntity = existingCh.orElseGet(() -> Chapter.builder()
+                    .storySlug(slug)
+                    .chapterName(chNum)
+                    .updatedAt(LocalDateTime.now())
+                    .build());
+
+            chapterEntity.setChapterTitle(chTitle);
+            chapterEntity.setChapterApiUrl(chapterApiUrl);
+            if (!imageUrls.isEmpty()) {
+                chapterEntity.setImageUrls(imageUrls);
+                chapterEntity.setPages(imageUrls);
+            }
+            chapterEntity.setUpdatedAt(LocalDateTime.now());
+            chaptersToSave.add(chapterEntity);
+
+            try {
+                double parsed = Double.parseDouble(chNum);
+                if (parsed >= maxChNum) {
+                    maxChNum = parsed;
+                    latestChName = "Ch. " + chNum;
+                }
+            } catch (Exception ignored) {}
         }
 
         Optional<Story> existingStoryOpt = storyRepository.findBySlug(slug);
@@ -424,17 +449,23 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                         Optional<Story> localStoryOpt = storyRepository.findBySlug(slug);
                         if (localStoryOpt.isPresent()) {
                             Story localStory = localStoryOpt.get();
-                            localStory.setLatestChapter("Ch. " + chNum);
-                            localStory.setUpdateAt(LocalDateTime.now());
-                            storyRepository.save(localStory);
+                            try {
+                                double newNum = Double.parseDouble(chNum.replaceAll("[^0-9.]", ""));
+                                double currNum = localStory.getLatestChapter() != null ? Double.parseDouble(localStory.getLatestChapter().replaceAll("[^0-9.]", "")) : -1.0;
+                                if (newNum > currNum) {
+                                    localStory.setLatestChapter("Ch. " + chNum);
+                                    localStory.setUpdateAt(LocalDateTime.now());
+                                    storyRepository.save(localStory);
 
-                            updatedCount++;
-                            updatedStoryDetailsList.add(CrawlerLog.UpdatedStoryDetail.builder()
-                                    .slug(slug)
-                                    .name(localStory.getName())
-                                    .latestChapter("Ch. " + chNum)
-                                    .thumbUrl(localStory.getThumbUrl())
-                                    .build());
+                                    updatedCount++;
+                                    updatedStoryDetailsList.add(CrawlerLog.UpdatedStoryDetail.builder()
+                                            .slug(slug)
+                                            .name(localStory.getName())
+                                            .latestChapter("Ch. " + chNum)
+                                            .thumbUrl(localStory.getThumbUrl())
+                                            .build());
+                                }
+                            } catch (Exception ignored) {}
                         }
                     }
                 }

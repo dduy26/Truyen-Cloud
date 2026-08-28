@@ -24,7 +24,15 @@ public class ChapterController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // 2. Lấy danh sách tất cả chapter của 1 bộ truyện theo slug
+    // 2. Lấy danh sách tất cả chapter của 1 bộ truyện theo slug (Hỗ trợ cả Query Param và Path Variable)
+    @GetMapping
+    public ResponseEntity<List<ChapterResponse>> getChaptersByQueryParam(@RequestParam(required = false) String storySlug) {
+        if (storySlug != null && !storySlug.trim().isEmpty()) {
+            return ResponseEntity.ok(chapterService.getChaptersByStorySlug(storySlug));
+        }
+        return ResponseEntity.ok(java.util.Collections.emptyList());
+    }
+
     @GetMapping({"/story/{storySlug}", "/{storySlug}"})
     public ResponseEntity<List<ChapterResponse>> getChaptersByStorySlug(@PathVariable String storySlug) {
         List<ChapterResponse> response = chapterService.getChaptersByStorySlug(storySlug);

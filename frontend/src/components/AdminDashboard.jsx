@@ -3,6 +3,66 @@ import api from '../services/api';
 
 const DEFAULT_COVER_IMAGE = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80';
 
+const IconDashboard = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" />
+  </svg>
+);
+
+const IconBook = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+  </svg>
+);
+
+const IconUpload = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+const IconUsers = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+
+const IconMessage = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+const IconRefresh = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <path d="M21.5 2v6h-6" /><path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+  </svg>
+);
+
+const IconTrash = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
+const IconZap = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);
+
+const IconServer = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
+  </svg>
+);
+
+const IconSearch = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+
 export default function AdminDashboard({
   stories = [],
   onRefreshStories,
@@ -722,16 +782,38 @@ export default function AdminDashboard({
             ⬅️ Quay Lại Trang Chủ
           </button>
           <div className="admin-user-pill">
-            <img
-              src="https://api.dicebear.com/7.x/adventurer/svg?seed=AdminUser"
-              alt="Admin Avatar"
-              className="avatar"
-              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--accent-pink)' }}
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = 'https://api.dicebear.com/7.x/bottts/svg?seed=Admin';
+            <div
+              className="admin-avatar-initials"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(99, 102, 241, 0.4)'
               }}
-            />
+            >
+              AD
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: '0',
+                  right: '0',
+                  width: '9px',
+                  height: '9px',
+                  backgroundColor: '#10b981',
+                  border: '2px solid var(--bg-card)',
+                  borderRadius: '50%'
+                }}
+              />
+            </div>
             <div>
               <div style={{ fontSize: '13px', fontWeight: 700, lineHeight: 1.2 }}>Admin User</div>
               <div style={{ fontSize: '10px', color: 'var(--accent-pink)', fontWeight: 800 }}>SYS_OP</div>
@@ -747,31 +829,31 @@ export default function AdminDashboard({
             className={`admin-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
-            📊 Tổng Quan
+            <IconDashboard size={15} /> Tổng Quan
           </button>
           <button
             className={`admin-tab-btn ${activeTab === 'stories' ? 'active' : ''}`}
             onClick={() => setActiveTab('stories')}
           >
-            📚 Quản Lý Truyện
+            <IconBook size={15} /> Quản Lý Truyện
           </button>
           <button
             className={`admin-tab-btn ${activeTab === 'chapters' ? 'active' : ''}`}
             onClick={() => setActiveTab('chapters')}
           >
-            📤 Đăng Chapter
+            <IconUpload size={15} /> Đăng Chapter
           </button>
           <button
             className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
             onClick={() => setActiveTab('users')}
           >
-            👥 Quản Lý Thành Viên ({usersList.filter(u => u.role !== 'ROLE_ADMIN').length})
+            <IconUsers size={15} /> Quản Lý Thành Viên ({usersList.filter(u => u.role !== 'ROLE_ADMIN').length})
           </button>
           <button
             className={`admin-tab-btn ${activeTab === 'comments' ? 'active' : ''}`}
             onClick={() => setActiveTab('comments')}
           >
-            💬 Bình Luận & Báo Cáo ({commentsList.length + commentReportsList.filter(r => r.status === 'PENDING').length})
+            <IconMessage size={15} /> Bình Luận & Báo Cáo ({commentsList.length + commentReportsList.filter(r => r.status === 'PENDING').length})
           </button>
         </div>
       </nav>
@@ -2086,29 +2168,90 @@ export default function AdminDashboard({
             )}
 
             {/* BATCH IMPORT & DB CLEANUP ACTIONS */}
-            <div style={{ backgroundColor: 'var(--bg-hover)', padding: '16px', borderRadius: '12px', marginBottom: '20px', border: '1px solid var(--border-color)' }}>
-              <label className="form-label" style={{ fontWeight: 700, fontSize: '14px', marginBottom: '8px', display: 'block', color: 'var(--text-primary)' }}>
-                Tác vụ nhanh MangaDex & Dọn dẹp Database:
+            <div style={{ backgroundColor: 'var(--bg-hover)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid var(--border-color)' }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '13px', marginBottom: '8px', display: 'block', color: 'var(--text-primary)' }}>
+                <IconZap size={14} /> Kích Hoạt Tác Vụ Cào Nhanh Theo Batch (Presets 1-Click):
               </label>
 
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              {/* Preset Buttons Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: 'pointer', textAlign: 'center' }}
+                  onClick={() => handleCrawlRange(1, 2)}
+                  disabled={isImporting}
+                >
+                  Batch 50 (Trang 1-2)
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: 'pointer', textAlign: 'center' }}
+                  onClick={() => handleCrawlRange(1, 4)}
+                  disabled={isImporting}
+                >
+                  Batch 100 (Trang 1-4)
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: 'pointer', textAlign: 'center' }}
+                  onClick={() => handleCrawlRange(1, 10)}
+                  disabled={isImporting}
+                >
+                  Batch 250 (Trang 1-10)
+                </button>
                 <button
                   type="button"
                   className="btn-primary"
-                  style={{ backgroundColor: '#8b5cf6', flex: 1, minWidth: '200px', padding: '10px 16px', fontSize: '13px', fontWeight: 700 }}
+                  style={{ backgroundColor: '#8b5cf6', padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: 'pointer', textAlign: 'center' }}
+                  onClick={() => handleCrawlRange(1, 20)}
+                  disabled={isImporting}
+                >
+                  Batch 500 (Trang 1-20)
+                </button>
+              </div>
+
+              {/* Custom Page Range Inputs & Reset Action */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600 }}>
+                  <span>Tùy chỉnh trang:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-control"
+                    style={{ width: '60px', padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
+                    value={startPageInput}
+                    onChange={(e) => setStartPageInput(parseInt(e.target.value) || 1)}
+                  />
+                  <span>➔</span>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-control"
+                    style={{ width: '60px', padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
+                    value={endPageInput}
+                    onChange={(e) => setEndPageInput(parseInt(e.target.value) || 5)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}
                   onClick={() => handleCrawlRange(startPageInput || 1, endPageInput || 5)}
                   disabled={isImporting}
                 >
-                  🚀 Cào Theo Trang ({startPageInput || 1} ➔ {endPageInput || 5})
+                  Cào Tùy Chọn
                 </button>
                 <button
                   type="button"
                   className="btn-danger"
-                  style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                  style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', marginLeft: 'auto' }}
                   onClick={handleResetDatabase}
                   disabled={isImporting}
                 >
-                  🧹 Xóa Sạch DB & Redis Cache
+                  <IconTrash size={13} /> Xóa DB & Cache
                 </button>
               </div>
             </div>

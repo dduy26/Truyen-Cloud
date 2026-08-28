@@ -173,20 +173,14 @@ export const api = {
     method: 'DELETE',
   }),
 
-  // MangaDex & Auto Importer APIs
-  searchOtruyenStories: (query) => request(`/admin/import-otruyen/search?q=${encodeURIComponent(query)}`).catch(() => []),
-  importOtruyenBySlug: (slug) => request(`/admin/import-otruyen/${slug}`, { method: 'POST' }),
-  searchMangadexStories: (query) => request(`/admin/import-otruyen/mangadex/search?q=${encodeURIComponent(query)}`).catch(() => []),
-  importMangadexById: (id) => request(`/admin/import-otruyen/mangadex/${id}`, { method: 'POST' }),
-  importBatchMangadexStories: (limit = 30) => request(`/admin/import-otruyen/mangadex/batch?limit=${limit}`, { method: 'POST' }),
-  clearOtruyenStories: () => request('/admin/import-otruyen/clear-otruyen-stories', { method: 'DELETE' }),
-
-  importBatchOtruyenStories: (startPage = 1, endPage = 5) => request(`/admin/import-otruyen/batch?startPage=${startPage}&endPage=${endPage}`, {
-    method: 'POST',
-  }),
-
-  syncLatestChapters: () => request('/admin/import-otruyen/sync-latest', { method: 'POST' }),
-  getCrawlerLogs: () => request('/admin/import-otruyen/crawler-logs').catch(() => []),
+  // MangaDex Auto Importer APIs
+  searchMangadexStories: (query) => request(`/admin/mangadex/search?q=${encodeURIComponent(query)}`).catch(() => []),
+  importMangadexById: (id) => request(`/admin/mangadex/import/${id}`, { method: 'POST' }),
+  importBatchMangadexStories: (limit = 30) => request(`/admin/mangadex/batch?limit=${limit}`, { method: 'POST' }),
+  crawlRange: (startPage = 1, endPage = 5) => request(`/admin/mangadex/crawl-range?startPage=${startPage}&endPage=${endPage}`, { method: 'POST' }),
+  resetDatabase: () => request('/admin/mangadex/reset-database', { method: 'POST' }),
+  syncLatestChapters: () => request('/admin/mangadex/sync-latest', { method: 'POST' }),
+  getCrawlerLogs: () => request('/admin/mangadex/crawler-logs').catch(() => []),
 
   // Chapter Management APIs
   getChaptersByStory: (storySlug) => request(`/chapters/story/${storySlug}`).catch(() => []),

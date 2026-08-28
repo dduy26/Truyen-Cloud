@@ -13,31 +13,27 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/admin/import-otruyen")
+@RequestMapping("/api/v1/admin/mangadex")
+@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
-public class OtruyenImportController {
+public class MangadexImportController {
 
     private final MangadexImportService mangadexImportService;
     private final CrawlerLogRepository crawlerLogRepository;
 
     @GetMapping("/search")
-    public ResponseEntity<List<Map<String, Object>>> searchOtruyen(@RequestParam String q) {
-        return ResponseEntity.ok(mangadexImportService.searchMangadexStories(q));
-    }
-
-    @GetMapping("/mangadex/search")
     public ResponseEntity<List<Map<String, Object>>> searchMangadex(@RequestParam String q) {
         return ResponseEntity.ok(mangadexImportService.searchMangadexStories(q));
     }
 
-    @PostMapping("/mangadex/{id}")
+    @RequestMapping(value = {"/import/{id}", "/{id}"}, method = {RequestMethod.POST, RequestMethod.GET})
     public ResponseEntity<Map<String, Object>> importMangadexById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Story storyEntity = mangadexImportService.importStoryFromMangadex(id);
             if (storyEntity != null) {
                 response.put("success", true);
-                response.put("message", "Đã import bộ truyện MangaDex \"" + storyEntity.getName() + "\" thành công!");
+                response.put("message", "Đã cào bộ truyện MangaDex \"" + storyEntity.getName() + "\" thành công!");
                 response.put("story", storyEntity);
                 return ResponseEntity.ok(response);
             } else {
@@ -47,55 +43,50 @@ public class OtruyenImportController {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Lỗi trong quá trình Import MangaDex: " + e.getMessage());
+            response.put("message", "Lỗi trong quá trình Cào MangaDex: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }
 
-    @PostMapping("/mangadex/batch")
-    public ResponseEntity<Map<String, Object>> importBatchMangadex(@RequestParam(defaultValue = "30") int limit) {
+    @RequestMapping(value = {"/crawl-range", "/batch"}, method = {RequestMethod.POST, RequestMethod.GET})
+    public ResponseEntity<Map<String, Object>> crawlRange(
+            @RequestParam(defaultValue = "1") int startPage,
+            @RequestParam(defaultValue = "5") int endPage,
+            @RequestParam(required = false) Integer limit) {
         Map<String, Object> response = new HashMap<>();
         try {
-            mangadexImportService.importBatchMangadexStoriesAsync(limit);
+            int from = Math.max(1, startPage);
+            int to = (endPage >= from) ? endPage : (limit != null ? (int) Math.ceil((double) limit / 25) : 5);
+
+            mangadexImportService.importBatchMangadexPagesAsync(from, to);
+
+            int totalExpected = (to - from + 1) * 25;
             response.put("success", true);
-            response.put("message", "🚀 Đã khởi chạy cào ngầm Top " + limit + " bộ truyện Hot nhất từ MangaDex Global CDN!");
+            response.put("message", "Đã khởi chạy cào ngầm từ Trang " + from + " đến Trang " + to + " (khoảng " + totalExpected + " bộ truyện Hot nhất từ MangaDex Global CDN)!");
+            response.put("startPage", from);
+            response.put("endPage", to);
+            response.put("estimatedStoriesCount", totalExpected);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Lỗi: " + e.getMessage());
+            response.put("message", "Lỗi khi cào dữ liệu: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }
 
-    @DeleteMapping("/clear-otruyen-stories")
-    public ResponseEntity<Map<String, Object>> clearAllOtruyenStories() {
+    @RequestMapping(value = "/reset-database", method = {RequestMethod.POST, RequestMethod.DELETE, RequestMethod.GET})
+    public ResponseEntity<Map<String, Object>> resetDatabase() {
         Map<String, Object> response = new HashMap<>();
         try {
-            int deleted = mangadexImportService.deleteAllOtruyenStories();
+            mangadexImportService.resetAllData();
             response.put("success", true);
-            response.put("message", "🧹 Đã xóa thành công " + deleted + " bộ truyện Otruyen cũ khỏi Database!");
-            response.put("deletedCount", deleted);
+            response.put("message", "🧹 Đã xóa sạch 100% dữ liệu Chapters, Stories và Cache Redis thành công!");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Lỗi khi dọn dẹp: " + e.getMessage());
+            response.put("message", "Lỗi reset Database: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
-    }
-
-    @PostMapping("/batch")
-    public ResponseEntity<Map<String, Object>> importBatchStories(
-            @RequestParam(required = false) Integer startPage,
-            @RequestParam(required = false) Integer endPage,
-            @RequestParam(defaultValue = "5") int pages) {
-        Map<String, Object> response = new HashMap<>();
-        int from = (startPage != null && startPage > 0) ? startPage : 1;
-        int to = (endPage != null && endPage >= from) ? endPage : (startPage != null ? startPage : pages);
-        int totalLimit = (to - from + 1) * 10;
-        mangadexImportService.importBatchMangadexStoriesAsync(totalLimit);
-        response.put("success", true);
-        response.put("message", "🚀 Đã khởi chạy cào ngầm Top " + totalLimit + " bộ truyện từ MangaDex Global CDN!");
-        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/sync-latest")
@@ -104,7 +95,7 @@ public class OtruyenImportController {
         try {
             int updatedCount = mangadexImportService.syncMangadexLatestUpdates("MANUAL_TRIGGER");
             response.put("success", true);
-            response.put("message", "⚡ Đã đồng bộ xong! Có " + updatedCount + " bộ truyện vừa được cập nhật chap mới từ MangaDex Global CDN.");
+            response.put("message", "Đã đồng bộ xong! Có " + updatedCount + " bộ truyện vừa được cập nhật chap mới từ MangaDex Global CDN.");
             response.put("updatedCount", updatedCount);
             return ResponseEntity.ok(response);
         } catch (Exception e) {

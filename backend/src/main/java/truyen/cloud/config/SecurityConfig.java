@@ -37,7 +37,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/api/v1/users/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").permitAll()
-                .requestMatchers("/api/v1/admin/import-otruyen/**").permitAll()
+                .requestMatchers("/api/v1/admin/mangadex/**").permitAll()
                 
                 // 2. Stories, Chapters & Comments API (Public Access for Admin CRUD & Guest Reading)
                 .requestMatchers("/api/v1/stories/**").permitAll()

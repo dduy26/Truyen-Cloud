@@ -9,7 +9,8 @@ public interface MangadexImportService {
     List<Map<String, Object>> searchMangadexStories(String keyword);
     Story importStoryFromMangadex(String mangadexId) throws Exception;
     void importBatchMangadexStoriesAsync(int limit);
+    void importBatchMangadexPagesAsync(int startPage, int endPage);
     int syncMangadexLatestUpdates();
     int syncMangadexLatestUpdates(String triggerType);
-    int deleteAllOtruyenStories();
+    void resetAllData();
 }

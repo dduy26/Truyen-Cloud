@@ -47,27 +47,28 @@ public class MangadexImportServiceImpl implements MangadexImportService {
 
 
     private String fetchJson(String url) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            if (response.getBody() != null) return response.getBody();
-        } catch (Exception e) {
-            log.warn("Direct fetch failed for {}, attempting proxy fallback...", url);
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                HttpEntity<String> entity = new HttpEntity<>(headers);
+                ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    return response.getBody();
+                }
+            } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
+                log.warn("MangaDex Rate Limit 429 on attempt {} for {}. Sleeping 1200ms...", attempt, url);
+                if (attempt < 3) {
+                    try { Thread.sleep(1200); } catch (InterruptedException ignored) {}
+                }
+            } catch (Exception e) {
+                log.warn("Direct fetch attempt {} failed for {}: {}", attempt, url, e.getMessage());
+                if (attempt < 3) {
+                    try { Thread.sleep(600); } catch (InterruptedException ignored) {}
+                }
+            }
         }
-
-        try {
-            String proxyUrl = "https://api.allorigins.win/raw?url=" + java.net.URLEncoder.encode(url, "UTF-8");
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            ResponseEntity<String> response = restTemplate.exchange(proxyUrl, HttpMethod.GET, entity, String.class);
-            return response.getBody();
-        } catch (Exception ex) {
-            log.error("Lỗi fetch URL MangaDex via proxy: " + url + " - " + ex.getMessage());
-            return null;
-        }
+        return null;
     }
 
     private String toSlug(String input) {
@@ -116,7 +117,7 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                         }
                         String thumbUrl = coverFileName.isEmpty()
                                 ? "https://uploads.mangadex.org/covers/" + id
-                                : "https://uploads.mangadex.org/covers/" + id + "/" + coverFileName + ".512.jpg";
+                                : "https://uploads.mangadex.org/covers/" + id + "/" + coverFileName;
                         map.put("thumbUrl", thumbUrl);
                         map.put("status", item.path("attributes").path("status").asText("Ongoing"));
                         map.put("latestChapter", "Ch. MangaDex");
@@ -178,7 +179,7 @@ public class MangadexImportServiceImpl implements MangadexImportService {
 
         String thumbUrl = coverFileName.isEmpty()
                 ? "https://uploads.mangadex.org/covers/" + mangadexId
-                : "https://uploads.mangadex.org/covers/" + mangadexId + "/" + coverFileName + ".512.jpg";
+                : "https://uploads.mangadex.org/covers/" + mangadexId + "/" + coverFileName;
 
         List<String> categories = new ArrayList<>();
         JsonNode tags = attrsNode.path("tags");
@@ -190,9 +191,19 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         }
         if (categories.isEmpty()) categories.add("Manga");
 
-        // 2. Fetch Chapters feed (English 'en' + Vietnamese 'vi')
-        String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage[]=en&translatedLanguage[]=vi&order[chapter]=asc&limit=300";
+        // 2. Fetch Chapters feed (Prefer English 'en' and Vietnamese 'vi')
+        String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?translatedLanguage%5B%5D=en&translatedLanguage%5B%5D=vi&contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&order%5Bchapter%5D=asc&limit=500";
         String jsonFeed = fetchJson(feedUrl);
+        if (jsonFeed != null) {
+            try {
+                JsonNode testRoot = objectMapper.readTree(jsonFeed);
+                if (!testRoot.path("data").isArray() || testRoot.path("data").isEmpty()) {
+                    String fallbackFeedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?contentRating%5B%5D=safe&contentRating%5B%5D=suggestive&contentRating%5B%5D=erotica&order%5Bchapter%5D=asc&limit=500";
+                    String fallbackJson = fetchJson(fallbackFeedUrl);
+                    if (fallbackJson != null) jsonFeed = fallbackJson;
+                }
+            } catch (Exception ignored) {}
+        }
         List<Chapter> chaptersToSave = new ArrayList<>();
         String latestChName = "Ch. 1";
 
@@ -203,10 +214,17 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                 Set<String> seenCh = new HashSet<>();
                 int processedChapters = 0;
 
+                log.info("MangaDex Feed for manga {} returned {} items", mangadexId, feedData.size());
                 for (JsonNode chItem : feedData) {
                     String chId = chItem.path("id").asText();
                     JsonNode chAttrs = chItem.path("attributes");
                     String chNum = chAttrs.path("chapter").asText("");
+                    JsonNode extNode = chAttrs.path("externalUrl");
+                    boolean hasExt = !extNode.isMissingNode() && !extNode.isNull() && !extNode.asText("").trim().isEmpty() && !"null".equalsIgnoreCase(extNode.asText("").trim());
+                    int pageCount = chAttrs.path("pages").asInt(0);
+
+                    // Skip external redirect links and 0-page placeholders
+                    if (hasExt || pageCount == 0) continue;
                     if (chNum.isEmpty()) continue;
                     if (seenCh.contains(chNum)) continue;
                     seenCh.add(chNum);
@@ -214,27 +232,42 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                     String chTitle = chAttrs.path("title").asText("");
                     if (chTitle.isEmpty()) chTitle = "Chapter " + chNum;
 
-                    // Fetch chapter image filenames directly via MangaDex At-Home CDN (Pre-fetch first 5 chapters to prevent 429 rate limits)
+                    // Fetch chapter image filenames directly via MangaDex At-Home CDN
                     List<String> imageUrls = new ArrayList<>();
                     String chapterApiUrl = MANGADEX_API_BASE + "at-home/server/" + chId;
 
-                    if (processedChapters < 5) {
+                    try {
                         try {
-                            String jsonAtHome = fetchJson(chapterApiUrl);
-                            if (jsonAtHome != null) {
-                                JsonNode homeRoot = objectMapper.readTree(jsonAtHome);
-                                String baseUrl = homeRoot.path("baseUrl").asText("");
-                                String hash = homeRoot.path("chapter").path("hash").asText("");
-                                JsonNode pageFiles = homeRoot.path("chapter").path("data");
-                                if (pageFiles.isArray() && !baseUrl.isEmpty() && !hash.isEmpty()) {
-                                    for (JsonNode pageFile : pageFiles) {
-                                        imageUrls.add(baseUrl + "/data/" + hash + "/" + pageFile.asText());
+                            Thread.sleep(350);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+
+                        String jsonAtHome = fetchJson(chapterApiUrl);
+                        if (jsonAtHome != null) {
+                            JsonNode homeRoot = objectMapper.readTree(jsonAtHome);
+                            String baseUrl = homeRoot.path("baseUrl").asText("");
+                            String hash = homeRoot.path("chapter").path("hash").asText("");
+                            JsonNode pageFiles = homeRoot.path("chapter").path("data");
+                            boolean isDataSaver = false;
+                            if (!pageFiles.isArray() || pageFiles.isEmpty()) {
+                                pageFiles = homeRoot.path("chapter").path("dataSaver");
+                                isDataSaver = true;
+                            }
+
+                            if (pageFiles.isArray() && !hash.isEmpty()) {
+                                String serverPrefix = "https://uploads.mangadex.org";
+                                String pathPrefix = isDataSaver ? "/data-saver/" : "/data/";
+                                for (JsonNode pageFile : pageFiles) {
+                                    String fileName = pageFile.asText("");
+                                    if (!fileName.isEmpty()) {
+                                        imageUrls.add(serverPrefix + pathPrefix + hash + "/" + fileName);
                                     }
                                 }
                             }
-                        } catch (Exception e) {
-                            log.warn("Không thể tải trước ảnh cho MangaDex chapter {}: {}", chNum, e.getMessage());
                         }
+                    } catch (Exception e) {
+                        log.warn("Không thể lấy trang ảnh cho MangaDex chapter {} (ID: {}): {}", chNum, chId, e.getMessage());
                     }
 
                     Optional<Chapter> existingCh = chapterRepository.findByStorySlugAndChapterName(slug, chNum);
@@ -252,10 +285,6 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                     chaptersToSave.add(chapterEntity);
                     latestChName = "Ch. " + chNum;
                     processedChapters++;
-
-                    if (processedChapters % 10 == 0) {
-                        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
-                    }
                 }
             }
         }
@@ -294,35 +323,49 @@ public class MangadexImportServiceImpl implements MangadexImportService {
     @Async
     @Override
     public void importBatchMangadexStoriesAsync(int limit) {
-        int target = Math.min(Math.max(5, limit), 50);
-        log.info("🚀 [MangaDex Batch] Bắt đầu tự động cào Top {} bộ truyện nổi tiếng nhất từ MangaDex...", target);
+        int targetPages = Math.max(1, (int) Math.ceil((double) limit / 25));
+        importBatchMangadexPagesAsync(1, Math.min(targetPages, 10));
+    }
 
-        try {
-            String url = MANGADEX_API_BASE + "manga?limit=" + target + "&order[followedCount]=desc&includes[]=cover_art&includes[]=author";
-            String jsonRaw = fetchJson(url);
-            if (jsonRaw != null) {
-                JsonNode root = objectMapper.readTree(jsonRaw);
-                JsonNode dataNode = root.path("data");
-                if (dataNode.isArray()) {
-                    int count = 0;
-                    for (JsonNode item : dataNode) {
-                        String id = item.path("id").asText();
-                        if (!id.isEmpty()) {
-                            try {
-                                importStoryFromMangadex(id);
-                                count++;
-                                Thread.sleep(500);
-                            } catch (Exception e) {
-                                log.warn("Lỗi import MangaDex batch ID {}: {}", id, e.getMessage());
+    @Async
+    @Override
+    public void importBatchMangadexPagesAsync(int startPage, int endPage) {
+        int from = Math.max(1, startPage);
+        int to = Math.min(Math.max(from, endPage), 10);
+        log.info("🚀 [MangaDex Batch] Bắt đầu cào tự động từ trang {} đến trang {} (khoảng {} bộ truyện nổi tiếng nhất)...", from, to, (to - from + 1) * 25);
+
+        int totalCount = 0;
+        for (int p = from; p <= to; p++) {
+            int offset = (p - 1) * 25;
+            try {
+                String url = MANGADEX_API_BASE + "manga?limit=25&offset=" + offset + "&order[followedCount]=desc&includes[]=cover_art&includes[]=author";
+                String jsonRaw = fetchJson(url);
+                if (jsonRaw != null) {
+                    JsonNode root = objectMapper.readTree(jsonRaw);
+                    JsonNode dataNode = root.path("data");
+                    if (dataNode.isArray()) {
+                        int pageCount = 0;
+                        for (JsonNode item : dataNode) {
+                            String id = item.path("id").asText();
+                            if (!id.isEmpty()) {
+                                try {
+                                    importStoryFromMangadex(id);
+                                    pageCount++;
+                                    totalCount++;
+                                    Thread.sleep(500);
+                                } catch (Exception e) {
+                                    log.warn("Lỗi import MangaDex batch ID {}: {}", id, e.getMessage());
+                                }
                             }
                         }
+                        log.info("✓ [MangaDex Batch] Hoàn tất cào Trang {}/{} ({} bộ truyện).", p, to, pageCount);
                     }
-                    log.info("🎉 [MangaDex Batch] Đã hoàn tất cào {} bộ truyện hot từ MangaDex!", count);
                 }
+            } catch (Exception e) {
+                log.error("Lỗi khi cào MangaDex trang {}: {}", p, e.getMessage());
             }
-        } catch (Exception e) {
-            log.error("Lỗi khi chạy importBatchMangadexStoriesAsync: {}", e.getMessage());
         }
+        log.info("🎉 [MangaDex Batch] Hoàn tất toàn bộ tiến trình cào {} bộ truyện hot từ MangaDex!", totalCount);
     }
 
     @Override
@@ -430,35 +473,15 @@ public class MangadexImportServiceImpl implements MangadexImportService {
     }
 
     @Override
-    public int deleteAllOtruyenStories() {
+    public void resetAllData() {
         try {
-            List<Story> allStories = storyRepository.findAll();
-            List<Story> otruyenStories = new ArrayList<>();
-            for (Story s : allStories) {
-                boolean isMangaDex = s.getThumbUrl() != null && (s.getThumbUrl().contains("mangadex.org") || s.getThumbUrl().contains("uploads.mangadex.org"));
-                if (!isMangaDex) {
-                    otruyenStories.add(s);
-                }
-            }
-
-            if (!otruyenStories.isEmpty()) {
-                for (Story s : otruyenStories) {
-                    if (s.getSlug() != null) {
-                        List<Chapter> chapters = chapterRepository.findByStorySlug(s.getSlug());
-                        if (!chapters.isEmpty()) {
-                            chapterRepository.deleteAll(chapters);
-                        }
-                    }
-                }
-                storyRepository.deleteAll(otruyenStories);
-                log.info("🧹 Đã dọn dẹp xóa batch {} bộ truyện cũ (không thuộc MangaDex) khỏi MongoDB.", otruyenStories.size());
-            }
-
+            chapterRepository.deleteAll();
+            storyRepository.deleteAll();
             clearCaches();
-            return otruyenStories.size();
+            log.info("Đã xóa sạch toàn bộ Chapters, Stories và Cache Redis thành công.");
         } catch (Exception e) {
-            log.error("Lỗi khi xóa truyện cũ: {}", e.getMessage());
-            return 0;
+            log.error("Lỗi khi resetAllData: {}", e.getMessage());
+            throw new RuntimeException("Không thể xóa Database: " + e.getMessage());
         }
     }
 

@@ -4,11 +4,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import truyen.cloud.dtos.request.ChapterRequest;
 import truyen.cloud.dtos.response.ChapterResponse;
@@ -25,9 +22,10 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Service
@@ -35,18 +33,11 @@ public class ChapterServiceImpl implements ChapterService {
     private final ChapterRepository chapterRepository;
     private final StoryRepository storyRepository;
     private final ChapterMapper chapterMapper;
-    private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChapterServiceImpl(ChapterRepository chapterRepository, StoryRepository storyRepository, ChapterMapper chapterMapper) {
         this.chapterRepository = chapterRepository;
         this.storyRepository = storyRepository;
         this.chapterMapper = chapterMapper;
-
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(12000);
-        this.restTemplate = new RestTemplate(factory);
     }
 
     @Override
@@ -97,66 +88,6 @@ public class ChapterServiceImpl implements ChapterService {
         return chapterMapper.toResponseList(chapters);
     }
 
-    private String fetchJson(String url) {
-        // 1. Fast Direct Fetch (1.5s connect timeout) - Instant success when VPN is ON
-        try {
-            SimpleClientHttpRequestFactory fastFactory = new SimpleClientHttpRequestFactory();
-            fastFactory.setConnectTimeout(1500);
-            fastFactory.setReadTimeout(4000);
-            RestTemplate fastRestTemplate = new RestTemplate(fastFactory);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            ResponseEntity<String> response = fastRestTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            if (response.getBody() != null && response.getStatusCode().is2xxSuccessful()) {
-                return response.getBody();
-            }
-        } catch (Exception e) {
-            log.warn("Direct fetch failed for {}, trying proxy fallback...", url);
-        }
-
-        // 2. Proxy Fallback 1: AllOrigins
-        try {
-            SimpleClientHttpRequestFactory proxyFactory = new SimpleClientHttpRequestFactory();
-            proxyFactory.setConnectTimeout(3000);
-            proxyFactory.setReadTimeout(5000);
-            RestTemplate proxyRestTemplate = new RestTemplate(proxyFactory);
-
-            String proxyUrl = "https://api.allorigins.win/raw?url=" + java.net.URLEncoder.encode(url, "UTF-8");
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            ResponseEntity<String> response = proxyRestTemplate.exchange(proxyUrl, HttpMethod.GET, entity, String.class);
-            if (response.getBody() != null && response.getStatusCode().is2xxSuccessful()) {
-                return response.getBody();
-            }
-        } catch (Exception ex) {
-            log.warn("Proxy fallback 1 (allorigins) failed for {}: {}", url, ex.getMessage());
-        }
-
-        // 3. Proxy Fallback 2: Codetabs
-        try {
-            SimpleClientHttpRequestFactory proxyFactory = new SimpleClientHttpRequestFactory();
-            proxyFactory.setConnectTimeout(3000);
-            proxyFactory.setReadTimeout(5000);
-            RestTemplate proxyRestTemplate = new RestTemplate(proxyFactory);
-
-            String proxyUrl = "https://api.codetabs.com/v1/proxy?quest=" + java.net.URLEncoder.encode(url, "UTF-8");
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            ResponseEntity<String> response = proxyRestTemplate.exchange(proxyUrl, HttpMethod.GET, entity, String.class);
-            if (response.getBody() != null && response.getStatusCode().is2xxSuccessful()) {
-                return response.getBody();
-            }
-        } catch (Exception ex) {
-            log.warn("Proxy fallback 2 (codetabs) failed for {}: {}", url, ex.getMessage());
-        }
-
-        return null;
-    }
-
     @Override
     @Cacheable(value = "chapter_detail", key = "#storySlug + ':' + #chapterName", unless = "#result == null || #result.pages == null || #result.pages.isEmpty()")
     public ChapterResponse getChapterDetail(String storySlug, String chapterName) {
@@ -191,7 +122,6 @@ public class ChapterServiceImpl implements ChapterService {
         if (chapterOpt.isPresent()) {
             chapter = chapterOpt.get();
         } else {
-            // Build a transient chapter response
             chapter = Chapter.builder()
                     .storySlug(storySlug)
                     .chapterName(chapterName)
@@ -199,84 +129,64 @@ public class ChapterServiceImpl implements ChapterService {
                     .pages(new ArrayList<>())
                     .updatedAt(LocalDateTime.now())
                     .build();
+        }
 
-            // Try to resolve MangaDex chapter ID if story was imported from MangaDex
+        // Clean up temporary P2P mangadex.network URLs and replace with permanent uploads.mangadex.org
+        if (chapter.getPages() != null) {
+            List<String> cleaned = chapter.getPages().stream()
+                    .filter(url -> url != null && !url.contains("cdn.myanimelist.net") && !url.contains("uploads.mangadex.org/covers"))
+                    .map(url -> url.replaceAll("https://[a-zA-Z0-9.-]+\\.mangadex\\.network", "https://uploads.mangadex.org"))
+                    .collect(Collectors.toList());
+            chapter.setPages(cleaned);
+            chapter.setImageUrls(cleaned);
+            if (chapter.getId() != null) {
+                chapterRepository.save(chapter);
+            }
+        }
+
+        // On-demand fetch/repair if pages array is empty OR contains relative filenames missing http/https
+        boolean hasInvalidUrls = chapter.getPages() == null || chapter.getPages().isEmpty() ||
+                chapter.getPages().stream().anyMatch(url -> url == null || (!url.startsWith("http://") && !url.startsWith("https://")));
+
+        if (hasInvalidUrls && chapter.getChapterApiUrl() != null && !chapter.getChapterApiUrl().isEmpty()) {
             try {
-                Optional<Story> storyOpt = storyRepository.findBySlug(storySlug);
-                if (storyOpt.isPresent() && storyOpt.get().getThumbUrl() != null && storyOpt.get().getThumbUrl().contains("mangadex.org/covers/")) {
-                    String thumb = storyOpt.get().getThumbUrl();
-                    String mangadexId = thumb.substring(thumb.indexOf("covers/") + 7).split("/")[0];
-                    if (!mangadexId.isEmpty()) {
-                        String feedUrl = "https://api.mangadex.org/manga/" + mangadexId + "/feed?translatedLanguage[]=en&translatedLanguage[]=vi&order[chapter]=asc&limit=300";
-                        String jsonFeed = fetchJson(feedUrl);
-                        if (jsonFeed != null) {
-                            JsonNode feedRoot = objectMapper.readTree(jsonFeed);
-                            JsonNode feedData = feedRoot.path("data");
-                            if (feedData.isArray()) {
-                                for (JsonNode chItem : feedData) {
-                                    String chNum = chItem.path("attributes").path("chapter").asText("");
-                                    try {
-                                        if (Math.abs(Float.parseFloat(chNum) - Float.parseFloat(chapterName)) < 0.0001) {
-                                            String chId = chItem.path("id").asText();
-                                            String chTitle = chItem.path("attributes").path("title").asText("Chapter " + chNum);
-                                            chapter.setChapterTitle(chTitle);
-                                            chapter.setChapterApiUrl("https://api.mangadex.org/at-home/server/" + chId);
-                                            break;
-                                        }
-                                    } catch (Exception ignored) {}
-                                }
+                RestTemplate rt = new RestTemplate();
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                HttpEntity<String> entity = new HttpEntity<>(headers);
+                ResponseEntity<String> res = rt.exchange(chapter.getChapterApiUrl(), HttpMethod.GET, entity, String.class);
+                if (res.getBody() != null) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    JsonNode root = mapper.readTree(res.getBody());
+                    String hash = root.path("chapter").path("hash").asText("");
+                    JsonNode pageFiles = root.path("chapter").path("data");
+                    boolean isDataSaver = false;
+                    if (!pageFiles.isArray() || pageFiles.isEmpty()) {
+                        pageFiles = root.path("chapter").path("dataSaver");
+                        isDataSaver = true;
+                    }
+                    if (pageFiles.isArray() && !hash.isEmpty()) {
+                        String prefix = "https://uploads.mangadex.org";
+                        String pathPrefix = isDataSaver ? "/data-saver/" : "/data/";
+                        List<String> livePages = new ArrayList<>();
+                        for (JsonNode pf : pageFiles) {
+                            String fName = pf.asText("");
+                            if (!fName.isEmpty()) {
+                                livePages.add(prefix + pathPrefix + hash + "/" + fName);
+                            }
+                        }
+                        if (!livePages.isEmpty()) {
+                            chapter.setPages(livePages);
+                            chapter.setImageUrls(livePages);
+                            if (chapter.getId() != null) {
+                                chapterRepository.save(chapter);
                             }
                         }
                     }
                 }
             } catch (Exception e) {
-                log.warn("Lỗi tự động tìm MangaDex chapter API URL cho {}/ch {}: {}", storySlug, chapterName, e.getMessage());
+                log.warn("On-demand fetch for chapter pages failed for {}: {}", chapter.getChapterApiUrl(), e.getMessage());
             }
-        }
-
-        // Check if pages list is empty or contains fallback cover image URLs
-        boolean containsCoverUrls = chapter.getPages() != null && chapter.getPages().stream()
-                .anyMatch(url -> url != null && (
-                        url.contains("cdn.myanimelist.net") ||
-                        url.contains("uploads.mangadex.org/covers")
-                ));
-
-        boolean isPageListInvalid = (chapter.getImageUrls() == null || chapter.getImageUrls().isEmpty())
-                || (chapter.getPages() == null || chapter.getPages().isEmpty())
-                || containsCoverUrls;
-
-        // Lazy fetch MangaDex images if page list is invalid but chapterApiUrl is present
-        if (isPageListInvalid && chapter.getChapterApiUrl() != null && !chapter.getChapterApiUrl().isEmpty()) {
-            try {
-                String jsonAtHome = fetchJson(chapter.getChapterApiUrl());
-                if (jsonAtHome != null) {
-                    JsonNode homeRoot = objectMapper.readTree(jsonAtHome);
-                    String baseUrl = homeRoot.path("baseUrl").asText("");
-                    String hash = homeRoot.path("chapter").path("hash").asText("");
-                    JsonNode pageFiles = homeRoot.path("chapter").path("data");
-                    if (pageFiles.isArray() && !baseUrl.isEmpty() && !hash.isEmpty()) {
-                        List<String> urls = new ArrayList<>();
-                        for (JsonNode pageFile : pageFiles) {
-                            urls.add(baseUrl + "/data/" + hash + "/" + pageFile.asText());
-                        }
-                        if (!urls.isEmpty()) {
-                            chapter.setImageUrls(urls);
-                            chapter.setPages(urls);
-                            chapterRepository.save(chapter);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Lỗi lazy load MangaDex chapter {}: {}", chapterName, e.getMessage());
-            }
-        }
-
-        // Clean up fallback poster URL from pages if lazy fetch didn't replace it
-        if (chapter.getPages() != null && chapter.getPages().stream().anyMatch(url -> url != null && (
-                url.contains("cdn.myanimelist.net") ||
-                url.contains("uploads.mangadex.org/covers")))) {
-            chapter.setPages(new ArrayList<>());
-            chapter.setImageUrls(new ArrayList<>());
         }
 
         // Synchronize imageUrls and pages

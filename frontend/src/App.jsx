@@ -147,9 +147,6 @@ export default function App() {
     if (!res.startsWith('http://') && !res.startsWith('https://')) {
       return DEFAULT_COVER_IMAGE;
     }
-    if (res.includes('mangadex.org') || res.includes('uploads.mangadex.org')) {
-      return `/api/v1/proxy-image?url=${encodeURIComponent(res)}`;
-    }
     return res;
   };
 
@@ -751,15 +748,6 @@ export default function App() {
       }
 
       let chData = await api.getChapterDetail(slug, chNum).catch(() => null);
-
-      if (chData) {
-        if (Array.isArray(chData.imageUrls)) {
-          chData.imageUrls = chData.imageUrls.map(u => (u && (u.includes('mangadex.org') || u.includes('uploads.mangadex.org'))) ? `/api/v1/proxy-image?url=${encodeURIComponent(u)}` : u);
-        }
-        if (Array.isArray(chData.pages)) {
-          chData.pages = chData.pages.map(u => (u && (u.includes('mangadex.org') || u.includes('uploads.mangadex.org'))) ? `/api/v1/proxy-image?url=${encodeURIComponent(u)}` : u);
-        }
-      }
 
       if (!chData || ((!Array.isArray(chData.imageUrls) || chData.imageUrls.length === 0) && (!Array.isArray(chData.pages) || chData.pages.length === 0))) {
         chData = {
@@ -1845,6 +1833,7 @@ export default function App() {
                     <img
                       src={sanitizeThumbUrl(s.thumbUrl)}
                       alt={s.name || 'Manga'}
+                      referrerPolicy="no-referrer"
                       className="today-recommendation-img"
                       onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                     />
@@ -1867,9 +1856,9 @@ export default function App() {
                         </div>
                         <button
                           className="btn-primary today-recommendation-btn"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/read/${s.slug}/1`); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/story/${s.slug}`); }}
                         >
-                          📖 Đọc ngay
+                          📖 Xem chi tiết
                         </button>
                       </div>
                     </div>
@@ -2798,6 +2787,7 @@ export default function App() {
                           <img
                             src={sanitizeThumbUrl(story.thumbUrl)}
                             alt={story.name}
+                            referrerPolicy="no-referrer"
                             className="manga-cover-img"
                             onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                           />
@@ -2990,6 +2980,7 @@ export default function App() {
                 <img
                   src={sanitizeThumbUrl(selectedStory.thumbUrl)}
                   alt={selectedStory.name}
+                  referrerPolicy="no-referrer"
                   className="story-detail-poster-img"
                   onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                 />
@@ -3044,7 +3035,10 @@ export default function App() {
                     type="button"
                     className="btn-primary"
                     style={{ backgroundColor: '#22c55e', padding: '10px 20px', fontSize: '13px', fontWeight: 700 }}
-                    onClick={() => navigate(`/read/${selectedStory.slug}/1`)}
+                    onClick={() => {
+                      const firstCh = (Array.isArray(storyChaptersList) && storyChaptersList.length > 0) ? (storyChaptersList[0].chapterName || '0') : '1';
+                      navigate(`/read/${selectedStory.slug}/${firstCh}`);
+                    }}
                   >
                     📗 Đọc từ đầu
                   </button>
@@ -3501,7 +3495,21 @@ export default function App() {
                       ? chapterDetail.pages
                       : [];
 
-                  const pagesList = rawPages.filter(Boolean);
+                  let basePrefix = '';
+                  const firstValid = rawPages.find(u => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://')));
+                  if (firstValid) {
+                    basePrefix = firstValid.substring(0, firstValid.lastIndexOf('/') + 1);
+                  }
+
+                  const pagesList = rawPages.map(url => {
+                    if (!url || typeof url !== 'string') return null;
+                    let trimmed = url.trim();
+                    let finalUrl = trimmed;
+                    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+                      finalUrl = basePrefix ? `${basePrefix}${trimmed}` : `https://uploads.mangadex.org/data/${trimmed}`;
+                    }
+                    return finalUrl.replace(/https:\/\/[a-zA-Z0-9.-]+\.mangadex\.network/, 'https://uploads.mangadex.org');
+                  }).filter(Boolean);
 
                   if (pagesList.length === 0) {
                     return (
@@ -3555,10 +3563,14 @@ export default function App() {
                     <img
                       key={idx}
                       src={imgUrl}
-                      alt={`Page ${idx + 1}`}
+                      alt={`Trang ${idx + 1}`}
+                      referrerPolicy="no-referrer"
                       className="webtoon-page-img"
                       loading="lazy"
-                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_WEBTOON_PAGE; }}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   ));
                 })()

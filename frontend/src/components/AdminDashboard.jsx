@@ -211,20 +211,62 @@ export default function AdminDashboard({
   const [startPageInput, setStartPageInput] = useState(1);
   const [endPageInput, setEndPageInput] = useState(5);
 
-  const handleClearOtruyen = async () => {
-    if (!window.confirm('Bạn có chắc chắn muốn dọn dẹp và xóa toàn bộ các bộ truyện cũ cào từ Otruyen (đang bị lỗi 504) khỏi Database không?')) return;
+  const handleResetDatabase = async () => {
+    if (!window.confirm('⚠️ Bạn có chắc chắn muốn XÓA SẠCH TOÀN BỘ Database MongoDB và Redis Cache không? Dữ liệu truyện và chapter cũ sẽ được xóa hoàn toàn.')) return;
     try {
-      showToast('Đang tiến hành dọn dẹp truyện Otruyen cũ...');
-      const res = await api.clearOtruyenStories();
+      showToast('🧹 Đang tiến hành xóa sạch Database & Redis Cache...');
+      const res = await api.resetDatabase();
       if (res && res.success) {
-        showToast(res.message || 'Đã dọn dẹp sạch sẽ các truyện Otruyen lỗi!');
+        showToast(res.message || '🎉 Đã xóa sạch Database & Redis Cache thành công!');
         if (onRefreshStories) onRefreshStories();
         fetchCrawlerLogs();
       } else {
-        showToast(res?.message || 'Không thể dọn dẹp!', 'error');
+        showToast(res?.message || 'Có lỗi khi xóa Database!', 'error');
       }
     } catch (e) {
-      showToast('Lỗi khi dọn dẹp truyện Otruyen: ' + e.message, 'error');
+      showToast('Lỗi khi reset Database: ' + e.message, 'error');
+    }
+  };
+
+  const handleCrawlRange = async (sPage = 1, ePage = 5) => {
+    setIsImporting(true);
+    const expected = (ePage - sPage + 1) * 25;
+    setImportProgress({ current: 10, total: 100, percent: 10, text: `🚀 Đang kích hoạt cào ngầm từ Trang ${sPage} đến Trang ${ePage} (~${expected} bộ truyện MangaDex)...` });
+
+    let prog = 10;
+    const interval = setInterval(() => {
+      prog = Math.min(98, prog + 10);
+      setImportProgress({
+        current: prog,
+        total: 100,
+        percent: prog,
+        text: `⚡ Đang tự động cào và nạp truyện MangaDex vào Database... ${prog}%`
+      });
+      if (prog >= 98) clearInterval(interval);
+    }, 400);
+
+    try {
+      const res = await api.crawlRange(sPage, ePage);
+      if (res && res.success) {
+        showToast(res.message || `🚀 Đã khởi chạy cào ngầm từ Trang ${sPage} -> Trang ${ePage}!`);
+        startBackgroundPolling();
+        setTimeout(() => {
+          setImportProgress({ current: 100, total: 100, percent: 100, text: '🎉 Đã hoàn tất cào ngầm MangaDex!' });
+          setTimeout(() => {
+            setShowOtruyenModal(false);
+            setImportProgress({ current: 0, total: 0, percent: 0, text: '' });
+            if (onRefreshStories) onRefreshStories();
+          }, 1200);
+        }, 3000);
+      } else {
+        clearInterval(interval);
+        showToast(res?.message || 'Lỗi khi kích hoạt tiến trình cào ngầm!', 'error');
+      }
+    } catch (err) {
+      clearInterval(interval);
+      showToast('Lỗi khi kết nối kích hoạt cào từ MangaDex!', 'error');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -985,6 +1027,7 @@ export default function AdminDashboard({
                           <img
                             src={story.thumbUrl || DEFAULT_COVER_IMAGE}
                             alt={story.name || 'Manga'}
+                            referrerPolicy="no-referrer"
                             className="admin-table-cover"
                             onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                           />
@@ -1652,9 +1695,25 @@ export default function AdminDashboard({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '450px', overflowY: 'auto' }}>
               {previewPagesModal.pages && previewPagesModal.pages.length > 0 ? (
-                previewPagesModal.pages.map((url, idx) => (
-                  <img key={idx} src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
-                ))
+                (() => {
+                  const rawP = previewPagesModal.pages;
+                  let basePrefix = '';
+                  const firstValid = rawP.find(u => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://')));
+                  if (firstValid) {
+                    basePrefix = firstValid.substring(0, firstValid.lastIndexOf('/') + 1);
+                  }
+                  return rawP.map((url, idx) => {
+                    if (!url || typeof url !== 'string') return null;
+                    let trimmed = url.trim();
+                    let finalUrl = trimmed;
+                    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+                      finalUrl = basePrefix ? `${basePrefix}${trimmed}` : `https://uploads.mangadex.org/data/${trimmed}`;
+                    }
+                    return (
+                      <img key={idx} src={finalUrl} alt={`Page ${idx + 1}`} referrerPolicy="no-referrer" style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                    );
+                  }).filter(Boolean);
+                })()
               ) : (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <div className="loading-spinner" style={{ margin: '0 auto 12px auto' }}></div>
@@ -2037,19 +2096,19 @@ export default function AdminDashboard({
                   type="button"
                   className="btn-primary"
                   style={{ backgroundColor: '#8b5cf6', flex: 1, minWidth: '200px', padding: '10px 16px', fontSize: '13px', fontWeight: 700 }}
-                  onClick={() => handleBatchImport(30)}
+                  onClick={() => handleCrawlRange(startPageInput || 1, endPageInput || 5)}
                   disabled={isImporting}
                 >
-                  🚀 Cào Tự Động Top 30 Truyện Hot MangaDex
+                  🚀 Cào Theo Trang ({startPageInput || 1} ➔ {endPageInput || 5})
                 </button>
                 <button
                   type="button"
                   className="btn-danger"
                   style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
-                  onClick={handleClearOtruyen}
+                  onClick={handleResetDatabase}
                   disabled={isImporting}
                 >
-                  🧹 Xóa Truyện Otruyen Cũ (Lỗi 504)
+                  🧹 Xóa Sạch DB & Redis Cache
                 </button>
               </div>
             </div>

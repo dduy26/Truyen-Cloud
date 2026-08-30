@@ -180,12 +180,12 @@ export default function App() {
       return DEFAULT_COVER_IMAGE;
     }
     // Prevent double proxying
-    if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=')) {
+    if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=') || res.includes('wsrv.nl')) {
       return res;
     }
-    // Route MangaDex covers through Backend Proxy (with proper MangaDex Referer)
+    // Route MangaDex covers through high-speed CDN image cache (bypasses hotlink protection & referer block)
     if (res.includes('uploads.mangadex.org') || res.includes('mangadex.org')) {
-      return `/api/v1/proxy-image?url=${encodeURIComponent(res)}`;
+      return `https://wsrv.nl/?url=${encodeURIComponent(res)}&w=400&output=webp&default=${encodeURIComponent(res)}`;
     }
     return res;
   };

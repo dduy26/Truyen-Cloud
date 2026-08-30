@@ -11,11 +11,11 @@ const sanitizeThumbUrl = (url) => {
   if (!res.startsWith('http://') && !res.startsWith('https://') && !res.startsWith('/api/')) {
     return DEFAULT_COVER_IMAGE;
   }
-  if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=')) {
+  if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=') || res.includes('wsrv.nl')) {
     return res;
   }
   if (res.includes('uploads.mangadex.org') || res.includes('mangadex.org')) {
-    return `/api/v1/proxy-image?url=${encodeURIComponent(res)}`;
+    return `https://wsrv.nl/?url=${encodeURIComponent(res)}&w=400&output=webp&default=${encodeURIComponent(res)}`;
   }
   return res;
 };

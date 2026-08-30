@@ -5,6 +5,7 @@ import truyen.cloud.dtos.response.StoryResponse;
 import truyen.cloud.service.StoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,14 +22,18 @@ public class StoryController {
     @GetMapping
     public ResponseEntity<List<StoryResponse>> getAllStories() {
         List<StoryResponse> response = storyService.getAllStories();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=300")
+                .body(response);
     }
 
     // 2. Lấy chi tiết 1 bộ truyện theo Slug (VD: /api/v1/stories/dao-hai-tac)
     @GetMapping("/{slug}")
     public ResponseEntity<StoryResponse> getStoryBySlug(@PathVariable String slug) {
         StoryResponse response = storyService.getStoryBySlug(slug);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=120, stale-while-revalidate=600")
+                .body(response);
     }
 
     // 3. Tạo mới bộ truyện (Dành cho Admin / Editor)

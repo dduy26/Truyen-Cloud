@@ -29,6 +29,7 @@ import truyen.cloud.repository.ChapterRepository;
 import truyen.cloud.repository.CrawlerLogRepository;
 import truyen.cloud.repository.StoryRepository;
 import truyen.cloud.service.MangadexImportService;
+import truyen.cloud.util.SlugUtil;
 
 @Slf4j
 @Service
@@ -72,11 +73,7 @@ public class MangadexImportServiceImpl implements MangadexImportService {
     }
 
     private String toSlug(String input) {
-        if (input == null) return "";
-        String nowhitespace = Pattern.compile("\\s+").matcher(input).replaceAll("-");
-        String normalized = Normalizer.normalize(nowhitespace, Normalizer.Form.NFD);
-        String slug = Pattern.compile("[^\\w-]").matcher(normalized).replaceAll("");
-        return slug.toLowerCase(Locale.ENGLISH);
+        return SlugUtil.toSlug(input);
     }
 
     @Override
@@ -191,43 +188,15 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         }
         if (categories.isEmpty()) categories.add("Manga");
 
-        // 2. Fetch ALL Chapters across ALL languages (Aggregate master list + Multi-language Feed)
+        // 2. Fetch ALL Chapters prioritizing VI -> EN -> RAW/Other (Strictly filtered: non-external, pages > 0)
         Map<String, ChapterMeta> chapterMap = new LinkedHashMap<>();
 
-        // Step 2.1: Master Aggregate (Instantly retrieves 100% of all distinct chapter IDs across all languages)
-        try {
-            String aggregateUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/aggregate";
-            String jsonAgg = fetchJson(aggregateUrl);
-            if (jsonAgg != null) {
-                JsonNode aggRoot = objectMapper.readTree(jsonAgg);
-                JsonNode volumesNode = aggRoot.path("volumes");
-                if (volumesNode.isObject()) {
-                    Iterator<String> volKeys = volumesNode.fieldNames();
-                    while (volKeys.hasNext()) {
-                        String volKey = volKeys.next();
-                        JsonNode chsNode = volumesNode.path(volKey).path("chapters");
-                        if (chsNode.isObject()) {
-                            Iterator<String> chKeys = chsNode.fieldNames();
-                            while (chKeys.hasNext()) {
-                                String chKey = chKeys.next();
-                                JsonNode chObj = chsNode.path(chKey);
-                                String chId = chObj.path("id").asText("");
-                                String chNum = chObj.path("chapter").asText(chKey);
-                                if (!chId.isEmpty() && !chNum.isEmpty()) {
-                                    chapterMap.put(chNum, new ChapterMeta(chId, chNum, "Chapter " + chNum, "other"));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Lỗi đọc aggregate MangaDex {}: {}", mangadexId, e.getMessage());
-        }
+        // Step 2.1: Primary Feed - Priority 1 & 2: Vietnamese (vi) and English (en)
+        fetchFeedPages(mangadexId, chapterMap, "vi", "en");
 
-        // Step 2.2: Fetch multi-language feeds to enrich titles & prioritize vi / en scanlations
-        fetchFeedPages(mangadexId, chapterMap, true);
-        fetchFeedPages(mangadexId, chapterMap, false);
+        // Step 2.2: Secondary Feed - Japanese (ja - Raw) and any others to fill missing chapters
+        fetchFeedPages(mangadexId, chapterMap, "ja");
+        fetchFeedPages(mangadexId, chapterMap); // Any remaining language with valid pages
 
         // Sort chapters numerically (0, 1, 2, ... 10, ... 100, 101, etc.)
         List<Map.Entry<String, ChapterMeta>> sortedChapters = new ArrayList<>(chapterMap.entrySet());
@@ -526,16 +495,18 @@ public class MangadexImportServiceImpl implements MangadexImportService {
         }
     }
 
-    private void fetchFeedPages(String mangadexId, Map<String, ChapterMeta> chapterMap, boolean filterLang) {
+    private void fetchFeedPages(String mangadexId, Map<String, ChapterMeta> chapterMap, String... targetLangs) {
         int feedOffset = 0;
         boolean hasMoreFeed = true;
 
         while (hasMoreFeed && feedOffset < 5000) {
-            String feedUrl = MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[chapter]=asc&limit=500&offset=" + feedOffset;
-            if (filterLang) {
-                feedUrl += "&translatedLanguage[]=vi&translatedLanguage[]=en";
+            StringBuilder feedUrl = new StringBuilder(MANGADEX_API_BASE + "manga/" + mangadexId + "/feed?contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic&order[chapter]=asc&limit=500&includeExternalUrl=0&offset=" + feedOffset);
+            if (targetLangs != null && targetLangs.length > 0) {
+                for (String lang : targetLangs) {
+                    feedUrl.append("&translatedLanguage[]=").append(lang);
+                }
             }
-            String jsonFeed = fetchJson(feedUrl);
+            String jsonFeed = fetchJson(feedUrl.toString());
             if (jsonFeed == null) break;
 
             try {
@@ -560,17 +531,20 @@ public class MangadexImportServiceImpl implements MangadexImportService {
                     boolean hasExt = !extNode.isMissingNode() && !extNode.isNull() && !extNode.asText("").trim().isEmpty() && !"null".equalsIgnoreCase(extNode.asText("").trim());
                     int pageCount = chAttrs.path("pages").asInt(0);
 
+                    // Skip external links and empty page chapters
                     if (hasExt || pageCount == 0 || chNum.isEmpty() || chId.isEmpty()) continue;
 
                     ChapterMeta existing = chapterMap.get(chNum);
                     if (existing == null) {
                         chapterMap.put(chNum, new ChapterMeta(chId, chNum, chTitle, chLang));
                     } else {
-                        // Priority ranking: 'vi' > 'en' > others
+                        // Hierarchy priority: 'vi' > 'en' > 'ja' > others
                         boolean shouldOverride = false;
                         if ("vi".equalsIgnoreCase(chLang)) {
                             shouldOverride = true;
                         } else if ("en".equalsIgnoreCase(chLang) && !"vi".equalsIgnoreCase(existing.lang)) {
+                            shouldOverride = true;
+                        } else if ("ja".equalsIgnoreCase(chLang) && !"vi".equalsIgnoreCase(existing.lang) && !"en".equalsIgnoreCase(existing.lang)) {
                             shouldOverride = true;
                         }
 

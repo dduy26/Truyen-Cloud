@@ -15,7 +15,7 @@ const sanitizeThumbUrl = (url) => {
     return res;
   }
   if (res.includes('uploads.mangadex.org') || res.includes('mangadex.org')) {
-    return `https://wsrv.nl/?url=${encodeURIComponent(res)}&w=400&output=webp&default=${encodeURIComponent(res)}`;
+    return `https://wsrv.nl/?url=${encodeURIComponent(res)}&w=300&q=75&output=webp&default=${encodeURIComponent(res)}`;
   }
   return res;
 };

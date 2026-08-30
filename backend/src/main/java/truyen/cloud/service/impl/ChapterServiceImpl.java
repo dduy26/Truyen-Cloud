@@ -148,44 +148,82 @@ public class ChapterServiceImpl implements ChapterService {
         boolean hasInvalidUrls = chapter.getPages() == null || chapter.getPages().isEmpty() ||
                 chapter.getPages().stream().anyMatch(url -> url == null || (!url.startsWith("http://") && !url.startsWith("https://")) || url.contains(" ") || url.contains(".mangadex.network"));
 
-        if (hasInvalidUrls && chapter.getChapterApiUrl() != null && !chapter.getChapterApiUrl().isEmpty()) {
-            try {
-                RestTemplate rt = new RestTemplate();
-                HttpHeaders headers = new HttpHeaders();
-                headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                HttpEntity<String> entity = new HttpEntity<>(headers);
-                ResponseEntity<String> res = rt.exchange(chapter.getChapterApiUrl(), HttpMethod.GET, entity, String.class);
-                if (res.getBody() != null) {
-                    ObjectMapper mapper = new ObjectMapper();
-                    JsonNode root = mapper.readTree(res.getBody());
-                    String hash = root.path("chapter").path("hash").asText("");
-                    JsonNode pageFiles = root.path("chapter").path("data");
-                    boolean isDataSaver = false;
-                    if (!pageFiles.isArray() || pageFiles.isEmpty()) {
-                        pageFiles = root.path("chapter").path("dataSaver");
-                        isDataSaver = true;
-                    }
-                    if (pageFiles.isArray() && !hash.isEmpty()) {
-                        String prefix = "https://uploads.mangadex.org";
-                        String pathPrefix = isDataSaver ? "/data-saver/" : "/data/";
-                        List<String> livePages = new ArrayList<>();
-                        for (JsonNode pf : pageFiles) {
-                            String fName = pf.asText("");
-                            if (!fName.isEmpty()) {
-                                livePages.add(prefix + pathPrefix + hash + "/" + fName);
-                            }
-                        }
-                        if (!livePages.isEmpty()) {
-                            chapter.setPages(livePages);
-                            chapter.setImageUrls(livePages);
-                            if (chapter.getId() != null) {
-                                chapterRepository.save(chapter);
-                            }
-                        }
-                    }
+        if (hasInvalidUrls) {
+            List<String> resolvedPages = new ArrayList<>();
+            String targetApiUrl = chapter.getChapterApiUrl();
+            RestTemplate rt = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+
+            // 1. First attempt: Use existing chapterApiUrl
+            if (targetApiUrl != null && !targetApiUrl.isEmpty()) {
+                try {
+                    resolvedPages = fetchPagesFromAtHome(rt, entity, targetApiUrl);
+                } catch (Exception e) {
+                    log.warn("On-demand fetch for chapter pages failed for {}: {}", targetApiUrl, e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("On-demand fetch for chapter pages failed for {}: {}", chapter.getChapterApiUrl(), e.getMessage());
+            }
+
+            // 2. Second attempt (Auto-Repair / Self-Healing): If first attempt failed, query MangaDex for active scanlation chapter ID
+            if (resolvedPages.isEmpty()) {
+                try {
+                    Optional<Story> storyOpt = storyRepository.findBySlug(storySlug);
+                    String mangadexId = "";
+                    if (storyOpt.isPresent()) {
+                        String thumb = storyOpt.get().getThumbUrl();
+                        if (thumb != null) {
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("covers/([a-f0-9\\-]+)").matcher(thumb);
+                            if (m.find()) {
+                                mangadexId = m.group(1);
+                            }
+                        }
+                    }
+
+                    if (!mangadexId.isEmpty()) {
+                        String queryUrl = "https://api.mangadex.org/chapter?manga=" + mangadexId + "&chapter=" + java.net.URLEncoder.encode(chapterName.trim(), "UTF-8") + "&order[readableAt]=desc&includeExternalUrl=0&limit=10";
+                        ResponseEntity<String> searchRes = rt.exchange(queryUrl, HttpMethod.GET, entity, String.class);
+                        if (searchRes.getBody() != null) {
+                            ObjectMapper mapper = new ObjectMapper();
+                            JsonNode root = mapper.readTree(searchRes.getBody());
+                            JsonNode dataNode = root.path("data");
+                            if (dataNode.isArray() && !dataNode.isEmpty()) {
+                                String bestChId = "";
+                                String bestLang = "";
+                                for (JsonNode item : dataNode) {
+                                    int pages = item.path("attributes").path("pages").asInt(0);
+                                    JsonNode ext = item.path("attributes").path("externalUrl");
+                                    boolean hasExt = !ext.isMissingNode() && !ext.isNull() && !ext.asText("").trim().isEmpty() && !"null".equalsIgnoreCase(ext.asText("").trim());
+                                    if (pages > 0 && !hasExt) {
+                                        String cId = item.path("id").asText("");
+                                        String cLang = item.path("attributes").path("translatedLanguage").asText("");
+                                        if (bestChId.isEmpty() || "vi".equalsIgnoreCase(cLang) || ("en".equalsIgnoreCase(cLang) && !"vi".equalsIgnoreCase(bestLang))) {
+                                            bestChId = cId;
+                                            bestLang = cLang;
+                                            if ("vi".equalsIgnoreCase(cLang)) break;
+                                        }
+                                    }
+                                }
+
+                                if (!bestChId.isEmpty()) {
+                                    String newApiUrl = "https://api.mangadex.org/at-home/server/" + bestChId;
+                                    chapter.setChapterApiUrl(newApiUrl);
+                                    resolvedPages = fetchPagesFromAtHome(rt, entity, newApiUrl);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Auto-repair chapter failed for {} chap {}: {}", storySlug, chapterName, e.getMessage());
+                }
+            }
+
+            if (!resolvedPages.isEmpty()) {
+                chapter.setPages(resolvedPages);
+                chapter.setImageUrls(resolvedPages);
+                if (chapter.getId() != null) {
+                    chapterRepository.save(chapter);
+                }
             }
         }
 
@@ -226,5 +264,36 @@ public class ChapterServiceImpl implements ChapterService {
             throw new ResourceNotFoundException("Không tìm thấy chương để xóa với id: " + id);
         }
         chapterRepository.deleteById(id);
+    }
+
+    private List<String> fetchPagesFromAtHome(RestTemplate rt, HttpEntity<String> entity, String apiUrl) {
+        List<String> pages = new ArrayList<>();
+        try {
+            ResponseEntity<String> res = rt.exchange(apiUrl, HttpMethod.GET, entity, String.class);
+            if (res.getBody() != null) {
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode root = mapper.readTree(res.getBody());
+                String hash = root.path("chapter").path("hash").asText("");
+                JsonNode pageFiles = root.path("chapter").path("data");
+                boolean isDataSaver = false;
+                if (!pageFiles.isArray() || pageFiles.isEmpty()) {
+                    pageFiles = root.path("chapter").path("dataSaver");
+                    isDataSaver = true;
+                }
+                if (pageFiles.isArray() && !hash.isEmpty()) {
+                    String prefix = "https://uploads.mangadex.org";
+                    String pathPrefix = isDataSaver ? "/data-saver/" : "/data/";
+                    for (JsonNode pf : pageFiles) {
+                        String fName = pf.asText("");
+                        if (!fName.isEmpty()) {
+                            pages.add(prefix + pathPrefix + hash + "/" + fName);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("fetchPagesFromAtHome error for {}: {}", apiUrl, e.getMessage());
+        }
+        return pages;
     }
 }

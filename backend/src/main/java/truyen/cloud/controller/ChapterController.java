@@ -5,6 +5,7 @@ import truyen.cloud.dtos.response.ChapterResponse;
 import truyen.cloud.service.ChapterService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +29,9 @@ public class ChapterController {
     @GetMapping
     public ResponseEntity<List<ChapterResponse>> getChaptersByQueryParam(@RequestParam(required = false) String storySlug) {
         if (storySlug != null && !storySlug.trim().isEmpty()) {
-            return ResponseEntity.ok(chapterService.getChaptersByStorySlug(storySlug));
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=300")
+                    .body(chapterService.getChaptersByStorySlug(storySlug));
         }
         return ResponseEntity.ok(java.util.Collections.emptyList());
     }
@@ -36,7 +39,9 @@ public class ChapterController {
     @GetMapping({"/story/{storySlug}", "/{storySlug}"})
     public ResponseEntity<List<ChapterResponse>> getChaptersByStorySlug(@PathVariable String storySlug) {
         List<ChapterResponse> response = chapterService.getChaptersByStorySlug(storySlug);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=300")
+                .body(response);
     }
 
     // 3. Lấy chi tiết 1 chapter cụ thể để đọc (Hỗ trợ cả /story/{slug}/{ch} và /{slug}/{ch})
@@ -45,7 +50,9 @@ public class ChapterController {
             @PathVariable String storySlug,
             @PathVariable String chapterName) {
         ChapterResponse response = chapterService.getChapterDetail(storySlug, chapterName);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=120, stale-while-revalidate=600")
+                .body(response);
     }
 
     // 4. Cập nhật thông tin chapter theo ID

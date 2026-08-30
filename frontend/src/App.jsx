@@ -183,9 +183,9 @@ export default function App() {
     if (res.includes('/api/v1/proxy-image?url=') || res.includes('/api/proxy/image?url=') || res.includes('wsrv.nl')) {
       return res;
     }
-    // Route MangaDex covers through high-speed CDN image cache (bypasses hotlink protection & referer block)
+    // Route MangaDex covers through high-speed CDN image cache (compressed WebP 300px, instant load)
     if (res.includes('uploads.mangadex.org') || res.includes('mangadex.org')) {
-      return `https://wsrv.nl/?url=${encodeURIComponent(res)}&w=400&output=webp&default=${encodeURIComponent(res)}`;
+      return `https://wsrv.nl/?url=${encodeURIComponent(res)}&w=300&q=75&output=webp&default=${encodeURIComponent(res)}`;
     }
     return res;
   };
@@ -1933,6 +1933,8 @@ export default function App() {
                       <img
                         src={sanitizeThumbUrl(story.thumbUrl)}
                         alt={story.name}
+                        loading={idx < 6 ? 'eager' : 'lazy'}
+                        decoding="async"
                         className="manga-cover-img"
                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                       />
@@ -1978,6 +1980,8 @@ export default function App() {
                       <img
                         src={sanitizeThumbUrl(story.thumbUrl)}
                         alt={story.name}
+                        loading="lazy"
+                        decoding="async"
                         className="manga-cover-img"
                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                       />
@@ -2024,6 +2028,8 @@ export default function App() {
                       <img
                         src={sanitizeThumbUrl(story.thumbUrl)}
                         alt={story.name}
+                        loading="lazy"
+                        decoding="async"
                         className="manga-cover-img"
                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                       />
@@ -2068,6 +2074,8 @@ export default function App() {
                       <img
                         src={sanitizeThumbUrl(story.thumbUrl)}
                         alt={story.name}
+                        loading="lazy"
+                        decoding="async"
                         className="manga-cover-img"
                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_COVER_IMAGE; }}
                       />

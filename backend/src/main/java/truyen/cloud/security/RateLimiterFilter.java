@@ -19,6 +19,17 @@ public class RateLimiterFilter extends OncePerRequestFilter {
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        // Không áp dụng rate limit cho API proxy ảnh & file tĩnh để tránh nghẽn khi cuộn đọc chapter
+        return path.startsWith("/api/v1/proxy-image")
+                || path.startsWith("/api/proxy")
+                || path.startsWith("/uploads")
+                || path.startsWith("/static")
+                || path.equals("/api/v1/health");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
@@ -27,7 +38,8 @@ public class RateLimiterFilter extends OncePerRequestFilter {
         if (path.startsWith("/api/v1/")) {
             String clientIp = getClientIp(request);
             boolean isAuthEndpoint = path.startsWith("/api/v1/auth/");
-            int maxAllowedRequests = isAuthEndpoint ? 10 : 60; // 10 req/s với Auth API, 60 req/s với API khác
+            // 30 req/phút với Auth API (chống brute force), 500 req/phút với các API đọc truyện / tìm kiếm / comment
+            int maxAllowedRequests = isAuthEndpoint ? 30 : 500;
             String redisKey = "RATE_LIMIT:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
 
             Long requestCount = redisTemplate.opsForValue().increment(redisKey);
